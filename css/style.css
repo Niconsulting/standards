@@ -289,6 +289,39 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor;
   font-variant-numeric: tabular-nums;
 }
 
+/* ---------- Reflexion: unauffaelliger Anstoss ---------- */
+
+.reflect-teaser {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 50px;
+  padding: 12px 14px;
+  margin: 4px 0 0;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 14.5px;
+  text-align: left;
+}
+.reflect-teaser:active { background: var(--surface-2); }
+
+.reflect-teaser-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--sand);
+  flex: none;
+}
+
+.reflect-teaser svg {
+  width: 18px; height: 18px;
+  margin-left: auto;
+  color: var(--muted);
+  flex: none;
+}
+
 /* ---------- Reflexionskarte ---------- */
 
 .reflection {
@@ -344,6 +377,114 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor;
   font-size: 12.5px;
   color: var(--muted);
 }
+
+/* ---------- Rückschau ---------- */
+
+.stat-hero {
+  text-align: center;
+  padding: 8px 0 26px;
+}
+
+.stat-hero-value {
+  font-size: 48px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+}
+.stat-hero-empty { color: var(--muted); font-size: 32px; }
+
+.stat-hero-label {
+  margin-top: 4px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.bar-row:last-child { border-bottom: none; }
+
+.bar-row-label {
+  width: 46px; flex: none;
+  font-size: 13px; color: var(--muted);
+}
+
+.bar-track {
+  flex: 1; height: 9px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.bar-fill { display: block; height: 100%; background: var(--accent); border-radius: 5px; }
+
+.bar-row-value {
+  width: 42px; flex: none; text-align: right;
+  font-size: 13.5px; font-variant-numeric: tabular-nums; color: var(--muted);
+}
+
+.pctrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 14px;
+}
+.qgroup { border-bottom: 1px solid var(--border); }
+.qgroup:last-child { border-bottom: none; }
+.card > .pctrow { border-bottom: 1px solid var(--border); }
+.card > .pctrow:last-child { border-bottom: none; }
+
+.pctrow-name { font-size: 15.5px; }
+.pctrow-value {
+  font-size: 15px; color: var(--accent);
+  font-variant-numeric: tabular-nums; flex: none;
+}
+
+.weekchips {
+  display: flex;
+  gap: 5px;
+  padding: 0 14px 14px;
+}
+
+.weekchip {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  padding: 7px 2px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.weekchip.is-met {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.weekchip.is-empty { opacity: .4; }
+
+.weekchip-date {
+  display: block;
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 2px;
+  font-weight: 400;
+}
+
+.over-note { padding: 14px; }
+.over-line {
+  margin: 0 0 8px;
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+.over-line:last-child { margin-bottom: 0; }
 
 /* ---------- Tab-Leiste ---------- */
 

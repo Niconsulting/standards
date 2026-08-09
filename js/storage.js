@@ -33,12 +33,18 @@ window.Store = (function () {
   //   daily    - Ja/Nein pro Tag
   //   dayquota - Zaehler pro Tag mit Minimum, z.B. 3 Mahlzeiten
   //   quota    - Zaehler pro Woche mit Minimum und optionalem Maximum
+  //
+  // activeWeekdays: null = jeden Tag, sonst Array von Wochentag-Indizes
+  // (Mo=0 ... So=6). Damit zaehlen z.B. bei "Mittagspause" nur Werktage
+  // als moegliche Tage, nicht 7.
+  var WORKDAYS = [0, 1, 2, 3, 4];
+
   function seedHabits(createdAt) {
     var seed = [
       { type: 'daily',    name: 'Glas Wasser nach dem Aufstehen' },
       { type: 'daily',    name: '5 Min Stretching oder Yoga' },
       { type: 'dayquota', name: 'Mahlzeiten', min: 3, max: null },
-      { type: 'daily',    name: 'Mittagspause gemacht' },
+      { type: 'daily',    name: 'Mittagspause gemacht', activeWeekdays: WORKDAYS },
       { type: 'daily',    name: 'Draußen spazieren gewesen' },
       { type: 'quota',    name: 'Sport', min: 2, max: 6 },
       { type: 'quota',    name: 'Haushalt und Putzen', min: 1, max: null },
@@ -47,7 +53,9 @@ window.Store = (function () {
     return seed.map(function (s, i) {
       return {
         id: uid(), type: s.type, name: s.name,
-        min: s.min || null, max: s.max || null, order: i,
+        min: s.min || null, max: s.max || null,
+        activeWeekdays: s.activeWeekdays || null,
+        order: i,
         createdAt: createdAt, archivedAt: null, updatedAt: nowIso()
       };
     });
@@ -187,6 +195,7 @@ window.Store = (function () {
       name: data.name,
       min: data.type === 'daily' ? null : (data.min || 1),
       max: data.type === 'daily' ? null : (data.max || null),
+      activeWeekdays: data.activeWeekdays || null,
       order: maxOrder + 1,
       createdAt: Dates.today(),
       archivedAt: null,

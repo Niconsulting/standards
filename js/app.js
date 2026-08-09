@@ -14,7 +14,8 @@
     view: 'heute',
     day: Dates.today(),
     month: Dates.currentMonth(),
-    pendingQuestion: null      // aktuell angezeigte Reflexionsfrage
+    pendingQuestion: null,      // aktuell angezeigte Reflexionsfrage
+    reflectionOpen: false       // Leitfrage ist erst nach Antippen sichtbar
   };
 
   /* ---------- kleine Helfer ---------- */
@@ -55,7 +56,8 @@
 
   async function render() {
     if (ui.view === 'heute') await renderHeute();
-    // Rueckschau und Einstellungen folgen im naechsten Schritt.
+    else if (ui.view === 'rueckschau') await renderRueckschau();
+    // Einstellungen folgt im naechsten Schritt.
   }
 
   /* ---------- Heute ---------- */
@@ -105,7 +107,7 @@
       return '<button class="row' + (done ? ' is-done' : '') + '" data-habit="' + h.id + '">' +
                '<span class="row-text">' +
                  '<span class="row-name">' + esc(h.name) + '</span>' +
-                 '<span class="row-meta">' + r7 + ' von 7 Tagen</span>' +
+                 '<span class="row-meta">' + r7.done + ' von ' + r7.possible + ' Tagen</span>' +
                '</span>' +
                '<span class="tick">' + ICON_CHECK + '</span>' +
              '</button>';
@@ -142,7 +144,7 @@
              '</div>' +
              '<div class="pips">' + pips + '</div>' +
              '<div class="qrow-controls">' +
-               '<span class="qrow-today">an ' + r7 + ' von 7 Tagen erreicht</span>' +
+               '<span class="qrow-today">an ' + r7.done + ' von ' + r7.possible + ' Tagen erreicht</span>' +
                '<button class="stepper" data-quota="' + h.id + '" data-action="minus" ' +
                  (dayCount === 0 ? 'disabled' : '') + ' aria-label="Eine Einheit entfernen">' +
                  ICON_MINUS + '</button>' +
@@ -217,6 +219,10 @@
 
   /* ---------- Reflexion ---------- */
 
+  var ICON_CHEVRON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
+
+  // Die Leitfrage ist bewusst NICHT das Erste, was man sieht: erst ein
+  // unauffaelliger Anstoss ganz unten, die eigentliche Frage nur nach Tap.
   function renderReflection(state, day, today) {
     var slot = $('#reflectionSlot');
 
@@ -224,6 +230,16 @@
     if (day !== today || !Stats.reflectionDue(state, today)) {
       slot.innerHTML = '';
       ui.pendingQuestion = null;
+      return;
+    }
+
+    if (!ui.reflectionOpen) {
+      slot.innerHTML =
+        '<button class="reflect-teaser" id="reflectTeaser">' +
+          '<span class="reflect-teaser-dot"></span>' +
+          '<span>Leitfrage verfügbar</span>' +
+          ICON_CHEVRON +
+        '</button>';
       return;
     }
 
@@ -261,7 +277,121 @@
     }
 
     ui.pendingQuestion = null;
+    ui.reflectionOpen = false;
     await render();
+  }
+
+  /* ---------- Rückschau ---------- */
+
+  async function renderRueckschau() {
+    var today = Dates.today();
+    var ym = ui.month;
+    var state = await Store.getState();
+
+    $('#monthLabel').textContent = Dates.formatMonth(ym);
+    $('#monthNext').disabled = (ym >= Dates.currentMonth());
+
+    var mf = Stats.monthFulfillment(state, ym, today);
+    var series = Stats.monthSeries(state, ym, 6, today);
+    var over = Stats.monthOverachievement(state, ym, today);
+    var refl = Stats.reflectionsInMonth(state, ym);
+
+    var html = '';
+    html += heroHtml(mf);
+    html += seriesHtml(series);
+    html += habitGroupHtml('Täglich', mf.perHabit.filter(function (p) {
+      return p.habit.type === 'daily' || p.habit.type === 'dayquota';
+    }));
+    html += quotaGroupHtml(mf.perHabit.filter(function (p) { return p.habit.type === 'quota'; }), ym, today, state);
+    html += overachievementHtml(over);
+    html += reflectionSummaryHtml(refl);
+
+    $('#rueckschauBody').innerHTML = html;
+  }
+
+  function heroHtml(mf) {
+    if (mf.possible === 0) {
+      return '<section class="stat-hero">' +
+               '<div class="stat-hero-value stat-hero-empty">–</div>' +
+               '<div class="stat-hero-label">Noch keine abgeschlossenen Tage in diesem Monat</div>' +
+             '</section>';
+    }
+    return '<section class="stat-hero">' +
+             '<div class="stat-hero-value">' + mf.pct + '%</div>' +
+             '<div class="stat-hero-label">Minimum-Standards erfüllt</div>' +
+           '</section>';
+  }
+
+  function seriesHtml(series) {
+    var rows = series.map(function (m) {
+      var pct = m.pct == null ? 0 : m.pct;
+      var label = m.pct == null ? '–' : m.pct + '%';
+      return '<div class="bar-row">' +
+               '<span class="bar-row-label">' + Dates.formatMonthShort(m.month) + '</span>' +
+               '<span class="bar-track"><span class="bar-fill" style="width:' + pct + '%"></span></span>' +
+               '<span class="bar-row-value">' + label + '</span>' +
+             '</div>';
+    }).join('');
+    return '<h2 class="section-title">Verlauf</h2><div class="card">' + rows + '</div>';
+  }
+
+  function habitGroupHtml(title, items) {
+    if (!items.length) return '';
+    var rows = items.map(function (p) {
+      var label = p.possible === 0 ? 'keine Daten' : p.pct + '%';
+      return '<div class="pctrow">' +
+               '<span class="pctrow-name">' + esc(p.habit.name) + '</span>' +
+               '<span class="pctrow-value">' + label + '</span>' +
+             '</div>';
+    }).join('');
+    return '<h2 class="section-title">' + title + '</h2><div class="card">' + rows + '</div>';
+  }
+
+  function quotaGroupHtml(items, ym, today, state) {
+    if (!items.length) return '';
+    var refDay = (ym === Dates.currentMonth()) ? today : Dates.monthDays(ym).slice(-1)[0];
+    var endMonday = Dates.mondayOf(refDay);
+
+    var blocks = items.map(function (p) {
+      var weeks = Stats.weekSeries(state, p.habit, endMonday, 8);
+      var label = p.possible === 0 ? 'keine Daten' : p.pct + '%';
+      var chips = weeks.map(function (w) {
+        if (w.beforeStart) {
+          return '<span class="weekchip is-empty">–<span class="weekchip-date">' +
+                 Dates.formatWeekShort(w.monday) + '</span></span>';
+        }
+        var cls = 'weekchip' + (w.complete && w.count >= w.min ? ' is-met' : '');
+        var val = w.complete ? String(w.count) : w.count + '…';
+        return '<span class="' + cls + '">' + val +
+               '<span class="weekchip-date">' + Dates.formatWeekShort(w.monday) + '</span></span>';
+      }).join('');
+      return '<div class="qgroup">' +
+               '<div class="pctrow">' +
+                 '<span class="pctrow-name">' + esc(p.habit.name) + '</span>' +
+                 '<span class="pctrow-value">' + label + '</span>' +
+               '</div>' +
+               '<div class="weekchips">' + chips + '</div>' +
+             '</div>';
+    }).join('');
+
+    return '<h2 class="section-title">Wochenquoten</h2><div class="card">' + blocks + '</div>';
+  }
+
+  function overachievementHtml(over) {
+    if (!over.length) return '';
+    var lines = over.map(function (o) {
+      return '<p class="over-line">' + esc(o.habit.name) + ': in ' + o.weeksOver + ' von ' +
+             o.weeks + ' Wochen über dem Minimum, bis zu ' + o.best + '×</p>';
+    }).join('');
+    return '<h2 class="section-title">Stärkere Wochen</h2><div class="card"><div class="over-note">' +
+           lines + '</div></div>';
+  }
+
+  function reflectionSummaryHtml(refl) {
+    if (refl.engaged === 0 && refl.skipped === 0) return '';
+    return '<h2 class="section-title">Reflexion</h2><div class="card"><div class="over-note">' +
+           '<p class="over-line">' + refl.engaged + '× damit beschäftigt, ' + refl.skipped + '× heute nicht</p>' +
+           '</div></div>';
   }
 
   /* ---------- Eingaben ---------- */
@@ -300,6 +430,12 @@
     $('#quotaList').addEventListener('click', handleListClick);
 
     $('#reflectionSlot').addEventListener('click', function (e) {
+      var teaser = e.target.closest('#reflectTeaser');
+      if (teaser) {
+        ui.reflectionOpen = true;
+        render();
+        return;
+      }
       var btn = e.target.closest('[data-reflect]');
       if (!btn) return;
       decideReflection(btn.dataset.reflect === 'yes');

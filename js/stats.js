@@ -48,11 +48,17 @@ window.Stats = (function () {
     return idx;
   }
 
+  // Passt dieser Wochentag zum Habit? (activeWeekdays: null = jeden Tag)
+  function isActiveWeekday(habit, day) {
+    return !habit.activeWeekdays || habit.activeWeekdays.indexOf(Dates.weekdayIndex(day)) !== -1;
+  }
+
   // Zaehlt dieser Tag fuer dieses Habit?
   function dayCounts(habit, day, todayKey) {
     if (day >= todayKey) return false;                       // heute und Zukunft noch nicht
     if (day < habit.createdAt) return false;                 // Habit gab es noch nicht
     if (habit.archivedAt && day >= habit.archivedAt) return false;
+    if (!isActiveWeekday(habit, day)) return false;           // z.B. Wochenende bei Werktags-Habits
     return true;
   }
 
@@ -159,20 +165,24 @@ window.Stats = (function () {
 
   // Rollierendes 7-Tage-Fenster, inklusive des angezeigten Tages.
   // Reine Fortschrittsanzeige, kein Ziel. Zaehlt bei Tagesquoten die Tage,
-  // an denen das Minimum erreicht war.
+  // an denen das Minimum erreicht war. "possible" beruecksichtigt
+  // activeWeekdays, damit z.B. Mittagspause "von 5" statt "von 7" zeigt -
+  // ein 7-Tage-Fenster enthaelt immer genau 5 Werktage, egal wo es beginnt.
   function rolling7(state, habit, endDate) {
     var ci = habit.type === 'daily' ? checkIndex(state) : null;
     var di = habit.type === 'dayquota' ? dayCountIndex(state) : null;
-    var n = 0;
+    var done = 0, possible = 0;
     for (var i = 0; i < 7; i++) {
       var day = Dates.addDays(endDate, -i);
+      if (!isActiveWeekday(habit, day)) continue;
+      possible++;
       if (habit.type === 'daily') {
-        if (ci[habit.id + '|' + day]) n++;
+        if (ci[habit.id + '|' + day]) done++;
       } else if (habit.type === 'dayquota') {
-        if ((di[habit.id + '|' + day] || 0) >= habit.min) n++;
+        if ((di[habit.id + '|' + day] || 0) >= habit.min) done++;
       }
     }
-    return n;
+    return { done: done, possible: possible };
   }
 
   // Die letzten n Wochen eines Quoten-Habits, aelteste zuerst.

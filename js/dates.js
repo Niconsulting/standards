@@ -111,6 +111,12 @@ window.Dates = (function () {
     return MONTHS[+p[1] - 1] + ' ' + p[0];
   }
 
+  // Kurzform fuer Listen, z.B. "Aug 26"
+  function formatMonthShort(ym) {
+    var p = ym.split('-');
+    return MONTHS[+p[1] - 1].slice(0, 3) + ' ' + p[0].slice(2);
+  }
+
   // Kurzform fuer den Wochenverlauf, z.B. "3.8."
   function formatWeekShort(mondayKey) {
     var d = parse(mondayKey);
@@ -138,6 +144,7 @@ window.Dates = (function () {
     formatDay: formatDay,
     formatFull: formatFull,
     formatMonth: formatMonth,
+    formatMonthShort: formatMonthShort,
     formatWeekShort: formatWeekShort
   };
 })();
