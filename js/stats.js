@@ -38,6 +38,16 @@ window.Stats = (function () {
     return idx;
   }
 
+  // habitId|datum -> Anzahl Einheiten an diesem Tag (fuer Tagesquoten)
+  function dayCountIndex(state) {
+    var idx = {};
+    state.counts.forEach(function (c) {
+      var k = c.habitId + '|' + c.date;
+      idx[k] = (idx[k] || 0) + 1;
+    });
+    return idx;
+  }
+
   // Zaehlt dieser Tag fuer dieses Habit?
   function dayCounts(habit, day, todayKey) {
     if (day >= todayKey) return false;                       // heute und Zukunft noch nicht
@@ -59,6 +69,7 @@ window.Stats = (function () {
   function monthFulfillment(state, ym, todayKey) {
     var ci = checkIndex(state);
     var wi = weekCountIndex(state);
+    var di = dayCountIndex(state);
     var days = Dates.monthDays(ym);
     var weeks = Dates.monthWeeks(ym);
 
@@ -73,6 +84,12 @@ window.Stats = (function () {
           if (!dayCounts(h, day, todayKey)) return;
           p++;
           if (ci[h.id + '|' + day]) a++;
+        });
+      } else if (h.type === 'dayquota') {
+        days.forEach(function (day) {
+          if (!dayCounts(h, day, todayKey)) return;
+          p++;
+          if ((di[h.id + '|' + day] || 0) >= h.min) a++;
         });
       } else {
         weeks.forEach(function (mon) {
@@ -113,6 +130,9 @@ window.Stats = (function () {
   /* ---------- Uebererfuellung ---------- */
 
   // Nur zur Anerkennung in der Rueckschau. Fliesst nirgends in eine Wertung ein.
+  //
+  // Bewusst nur Wochenquoten: Bei einer Tagesquote wie den Mahlzeiten waere
+  // "mehr als das Minimum" keine Leistung, die man wuerdigen will.
   function monthOverachievement(state, ym, todayKey) {
     var wi = weekCountIndex(state);
     var weeks = Dates.monthWeeks(ym);
@@ -137,13 +157,20 @@ window.Stats = (function () {
 
   /* ---------- Laufende Anzeigen ---------- */
 
-  // Rollierendes 7-Tage-Fenster fuer die taeglichen Habits, inklusive des
-  // angezeigten Tages. Reine Fortschrittsanzeige, kein Ziel.
-  function rolling7(state, habitId, endDate) {
-    var ci = checkIndex(state);
+  // Rollierendes 7-Tage-Fenster, inklusive des angezeigten Tages.
+  // Reine Fortschrittsanzeige, kein Ziel. Zaehlt bei Tagesquoten die Tage,
+  // an denen das Minimum erreicht war.
+  function rolling7(state, habit, endDate) {
+    var ci = habit.type === 'daily' ? checkIndex(state) : null;
+    var di = habit.type === 'dayquota' ? dayCountIndex(state) : null;
     var n = 0;
     for (var i = 0; i < 7; i++) {
-      if (ci[habitId + '|' + Dates.addDays(endDate, -i)]) n++;
+      var day = Dates.addDays(endDate, -i);
+      if (habit.type === 'daily') {
+        if (ci[habit.id + '|' + day]) n++;
+      } else if (habit.type === 'dayquota') {
+        if ((di[habit.id + '|' + day] || 0) >= habit.min) n++;
+      }
     }
     return n;
   }

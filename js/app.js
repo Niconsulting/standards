@@ -84,7 +84,9 @@
   }
 
   function renderDaily(state, habits, dayData, day) {
-    var list = habits.filter(function (h) { return h.type === 'daily'; });
+    var list = habits.filter(function (h) {
+      return h.type === 'daily' || h.type === 'dayquota';
+    });
     var el = $('#dailyList');
 
     if (!list.length) {
@@ -93,8 +95,13 @@
     }
 
     el.innerHTML = list.map(function (h) {
+      var r7 = Stats.rolling7(state, h, day);
+
+      if (h.type === 'dayquota') {
+        return dayQuotaRowHtml(h, dayData.counts[h.id] || 0, r7);
+      }
+
       var done = !!dayData.checks[h.id];
-      var r7 = Stats.rolling7(state, h.id, day);
       return '<button class="row' + (done ? ' is-done' : '') + '" data-habit="' + h.id + '">' +
                '<span class="row-text">' +
                  '<span class="row-name">' + esc(h.name) + '</span>' +
@@ -103,6 +110,46 @@
                '<span class="tick">' + ICON_CHECK + '</span>' +
              '</button>';
     }).join('');
+  }
+
+  // Tagesquote: Zaehler mit Minimum pro Tag, z.B. drei Mahlzeiten.
+  // Anders als bei der Wochenquote wird kein leeres Bonusfeld vorgehalten -
+  // bei drei Mahlzeiten sind drei Felder die ganze Geschichte.
+  function dayQuotaRowHtml(h, dayCount, r7) {
+    var met = dayCount >= h.min;
+    var total = h.max || Math.max(h.min, dayCount);
+    if (total > 10) total = 10;
+    var extra = Math.max(0, dayCount - total);
+
+    var pips = '';
+    for (var i = 0; i < total; i++) {
+      var cls = 'pip';
+      if (i >= h.min) cls += ' is-bonus';
+      if (i < dayCount) cls += ' is-on';
+      if (i === h.min - 1 && total > h.min) cls += ' is-boundary';
+      pips += '<span class="' + cls + '"></span>';
+    }
+    if (extra > 0) pips += '<span class="pip-extra">+' + extra + '</span>';
+
+    var countText = met
+      ? dayCount + '× · Minimum erreicht'
+      : dayCount + ' von ' + h.min;
+
+    return '<div class="qrow' + (met ? ' is-met' : '') + '">' +
+             '<div class="qrow-head">' +
+               '<span class="qrow-name">' + esc(h.name) + '</span>' +
+               '<span class="qrow-count">' + countText + '</span>' +
+             '</div>' +
+             '<div class="pips">' + pips + '</div>' +
+             '<div class="qrow-controls">' +
+               '<span class="qrow-today">an ' + r7 + ' von 7 Tagen erreicht</span>' +
+               '<button class="stepper" data-quota="' + h.id + '" data-action="minus" ' +
+                 (dayCount === 0 ? 'disabled' : '') + ' aria-label="Eine Einheit entfernen">' +
+                 ICON_MINUS + '</button>' +
+               '<button class="stepper" data-quota="' + h.id + '" data-action="plus" ' +
+                 'aria-label="Eine Einheit hinzufügen">' + ICON_PLUS + '</button>' +
+             '</div>' +
+           '</div>';
   }
 
   async function renderQuota(habits, dayData, day, today) {
@@ -233,21 +280,24 @@
       render();
     });
 
-    $('#dailyList').addEventListener('click', async function (e) {
+    // Beide Listen koennen Haken und Zaehler enthalten.
+    async function handleListClick(e) {
+      var step = e.target.closest('[data-quota]');
+      if (step) {
+        if (step.disabled) return;
+        if (step.dataset.action === 'plus') await Store.addCount(step.dataset.quota, ui.day);
+        else await Store.removeCount(step.dataset.quota, ui.day);
+        await render();
+        return;
+      }
       var row = e.target.closest('[data-habit]');
       if (!row) return;
-      var wasDone = row.classList.contains('is-done');
-      await Store.setCheck(row.dataset.habit, ui.day, !wasDone);
+      await Store.setCheck(row.dataset.habit, ui.day, !row.classList.contains('is-done'));
       await render();
-    });
+    }
 
-    $('#quotaList').addEventListener('click', async function (e) {
-      var btn = e.target.closest('[data-quota]');
-      if (!btn || btn.disabled) return;
-      if (btn.dataset.action === 'plus') await Store.addCount(btn.dataset.quota, ui.day);
-      else await Store.removeCount(btn.dataset.quota, ui.day);
-      await render();
-    });
+    $('#dailyList').addEventListener('click', handleListClick);
+    $('#quotaList').addEventListener('click', handleListClick);
 
     $('#reflectionSlot').addEventListener('click', function (e) {
       var btn = e.target.closest('[data-reflect]');

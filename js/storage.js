@@ -29,35 +29,28 @@ window.Store = (function () {
 
   /* ---------- Startdaten ---------- */
 
+  // Drei Habit-Typen:
+  //   daily    - Ja/Nein pro Tag
+  //   dayquota - Zaehler pro Tag mit Minimum, z.B. 3 Mahlzeiten
+  //   quota    - Zaehler pro Woche mit Minimum und optionalem Maximum
   function seedHabits(createdAt) {
-    var daily = [
-      'Glas Wasser nach dem Aufstehen',
-      '5 Min Stretching oder Yoga',
-      'Mindestens 3 Mahlzeiten',
-      'Mittagspause gemacht',
-      'Draußen spazieren gewesen'
+    var seed = [
+      { type: 'daily',    name: 'Glas Wasser nach dem Aufstehen' },
+      { type: 'daily',    name: '5 Min Stretching oder Yoga' },
+      { type: 'dayquota', name: 'Mahlzeiten', min: 3, max: null },
+      { type: 'daily',    name: 'Mittagspause gemacht' },
+      { type: 'daily',    name: 'Draußen spazieren gewesen' },
+      { type: 'quota',    name: 'Sport', min: 2, max: 6 },
+      { type: 'quota',    name: 'Haushalt und Putzen', min: 1, max: null },
+      { type: 'quota',    name: 'Lesen, 5 Min', min: 3, max: 7 }
     ];
-    var quota = [
-      { name: 'Sport', min: 2, max: 6 },
-      { name: 'Haushalt und Putzen', min: 1, max: null },
-      { name: 'Lesen, 5 Min', min: 3, max: 7 }
-    ];
-    var out = [], order = 0, i;
-    for (i = 0; i < daily.length; i++) {
-      out.push({
-        id: uid(), type: 'daily', name: daily[i],
-        min: null, max: null, order: order++,
+    return seed.map(function (s, i) {
+      return {
+        id: uid(), type: s.type, name: s.name,
+        min: s.min || null, max: s.max || null, order: i,
         createdAt: createdAt, archivedAt: null, updatedAt: nowIso()
-      });
-    }
-    for (i = 0; i < quota.length; i++) {
-      out.push({
-        id: uid(), type: 'quota', name: quota[i].name,
-        min: quota[i].min, max: quota[i].max, order: order++,
-        createdAt: createdAt, archivedAt: null, updatedAt: nowIso()
-      });
-    }
-    return out;
+      };
+    });
   }
 
   function defaults() {
@@ -192,8 +185,8 @@ window.Store = (function () {
       id: uid(),
       type: data.type,
       name: data.name,
-      min: data.type === 'quota' ? (data.min || 1) : null,
-      max: data.type === 'quota' ? (data.max || null) : null,
+      min: data.type === 'daily' ? null : (data.min || 1),
+      max: data.type === 'daily' ? null : (data.max || null),
       order: maxOrder + 1,
       createdAt: Dates.today(),
       archivedAt: null,
