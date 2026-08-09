@@ -125,10 +125,14 @@ window.Stats = (function () {
   }
 
   // Die Quoten der letzten n Monate, aeltester zuerst.
-  function monthSeries(state, endYm, n, todayKey) {
+  // minYm begrenzt nach hinten: Monate, in denen es die App noch gar nicht
+  // gab, tauchen gar nicht erst auf.
+  function monthSeries(state, endYm, n, todayKey, minYm) {
     var out = [];
     for (var i = n - 1; i >= 0; i--) {
-      out.push(monthFulfillment(state, Dates.addMonths(endYm, -i), todayKey));
+      var ym = Dates.addMonths(endYm, -i);
+      if (minYm && ym < minYm) continue;
+      out.push(monthFulfillment(state, ym, todayKey));
     }
     return out;
   }

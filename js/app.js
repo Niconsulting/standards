@@ -57,7 +57,7 @@
   async function render() {
     if (ui.view === 'heute') await renderHeute();
     else if (ui.view === 'rueckschau') await renderRueckschau();
-    // Einstellungen folgt im naechsten Schritt.
+    else if (ui.view === 'einstellungen') await Settings.render($('#einstellungenBody'));
   }
 
   /* ---------- Heute ---------- */
@@ -76,6 +76,7 @@
     $('#dayPrev').disabled = Dates.diffDays(day, today) >= MAX_BACKFILL_DAYS;
     $('#dayNext').disabled = (day >= today);
 
+    await renderBackupHint(today);
     renderReflection(state, day, today);
     renderDaily(state, habits, dayData, day);
     await renderQuota(habits, dayData, day, today);
@@ -219,6 +220,32 @@
 
   /* ---------- Reflexion ---------- */
 
+  /* ---------- Sicherungs-Hinweis ---------- */
+
+  // Ruhiger Hinweis, keine Warnung: keine Signalfarbe, kein Ausrufezeichen,
+  // jederzeit wegtippbar.
+  async function renderBackupHint(today) {
+    var slot = $('#backupSlot');
+    var meta = await Store.getMeta();
+    var settings = await Store.getSettings();
+
+    if (!Backup.backupDue(meta, settings, today)) { slot.innerHTML = ''; return; }
+
+    var days = Backup.daysSinceBackup(meta, today);
+    var text = Backup.hasNeverExported(meta)
+      ? 'Seit ' + days + ' Tagen in Benutzung, noch ohne Sicherung.'
+      : 'Letzte Sicherung vor ' + days + ' Tagen.';
+
+    slot.innerHTML =
+      '<div class="hint">' +
+        '<p class="hint-text">' + text + '</p>' +
+        '<div class="hint-actions">' +
+          '<button class="btn btn-primary" data-backup="now">Sicherung erstellen</button>' +
+          '<button class="btn" data-backup="later">Später</button>' +
+        '</div>' +
+      '</div>';
+  }
+
   var ICON_CHEVRON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
 
   // Die Leitfrage ist bewusst NICHT das Erste, was man sieht: erst ein
@@ -250,7 +277,12 @@
 
     slot.innerHTML =
       '<div class="reflection">' +
-        '<p class="reflection-kicker">Leitfrage</p>' +
+        '<div class="reflection-head">' +
+          '<p class="reflection-kicker">Leitfrage</p>' +
+          '<button class="reflection-close" id="reflectClose" aria-label="Zuklappen">' +
+            '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>' +
+          '</button>' +
+        '</div>' +
         '<p class="reflection-q">' + esc(ui.pendingQuestion.text) + '</p>' +
         '<div class="reflection-actions">' +
           '<button class="btn btn-primary" data-reflect="yes">Damit beschäftige ich mich</button>' +
@@ -285,14 +317,20 @@
 
   async function renderRueckschau() {
     var today = Dates.today();
-    var ym = ui.month;
     var state = await Store.getState();
+    var meta = await Store.getMeta();
+
+    // Vor dem ersten Tag mit der App gibt es nichts zu zeigen.
+    var firstMonth = Dates.monthOf(meta.firstUseAt || today);
+    if (ui.month < firstMonth) ui.month = firstMonth;
+    var ym = ui.month;
 
     $('#monthLabel').textContent = Dates.formatMonth(ym);
     $('#monthNext').disabled = (ym >= Dates.currentMonth());
+    $('#monthPrev').disabled = (ym <= firstMonth);
 
     var mf = Stats.monthFulfillment(state, ym, today);
-    var series = Stats.monthSeries(state, ym, 6, today);
+    var series = Stats.monthSeries(state, ym, 6, today, firstMonth);
     var over = Stats.monthOverachievement(state, ym, today);
     var refl = Stats.reflectionsInMonth(state, ym);
 
@@ -429,10 +467,33 @@
     $('#dailyList').addEventListener('click', handleListClick);
     $('#quotaList').addEventListener('click', handleListClick);
 
+    $('#backupSlot').addEventListener('click', async function (e) {
+      var btn = e.target.closest('[data-backup]');
+      if (!btn) return;
+      if (btn.dataset.backup === 'now') {
+        var res = await Backup.exportData();
+        if (res.ok && res.via === 'download') {
+          alert('Sicherung heruntergeladen. Falls nichts passiert ist, findest du unter ' +
+                '"Mehr" die Möglichkeit, die Sicherung als Text anzuzeigen.');
+        }
+      } else {
+        // Wegtippen kostet nichts und fragt in drei Tagen erneut.
+        await Store.updateMeta({ backupSnoozedUntil: Dates.addDays(Dates.today(), 3) });
+      }
+      await render();
+    });
+
     $('#reflectionSlot').addEventListener('click', function (e) {
       var teaser = e.target.closest('#reflectTeaser');
       if (teaser) {
         ui.reflectionOpen = true;
+        render();
+        return;
+      }
+      // Zuklappen ohne Entscheidung: nichts wird gespeichert, die Frage
+      // bleibt fuer spaeter stehen.
+      if (e.target.closest('#reflectClose')) {
+        ui.reflectionOpen = false;
         render();
         return;
       }
@@ -467,6 +528,13 @@
     bindEvents();
     setView('heute');
   }
+
+  // Kleine Schnittstelle fuer die anderen Dateien.
+  window.App = {
+    refresh: render,
+    applyTheme: applyTheme,
+    goTo: setView
+  };
 
   document.addEventListener('DOMContentLoaded', start);
 })();

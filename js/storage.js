@@ -17,7 +17,7 @@ window.Store = (function () {
   'use strict';
 
   var DB_KEY = 'standards.v1';
-  var SCHEMA_VERSION = 1;
+  var SCHEMA_VERSION = 2;
 
   var cache = null;
 
@@ -85,12 +85,41 @@ window.Store = (function () {
 
   /* ---------- Laden und Speichern ---------- */
 
+  /* ---------- Migrationen ---------- */
+
+  // Wandelt aeltere Datenstaende auf die aktuelle Schema-Version um.
+  //
+  // Wichtig: Die Startliste der Habits wird nur beim allerersten Oeffnen
+  // angelegt. Aenderungen daran erreichen bestehende Installationen NICHT.
+  // Wer schon Daten hat, braucht deshalb hier eine ausdrueckliche Migration.
+  // Gibt true zurueck, wenn etwas geaendert wurde.
+  function migrate(db) {
+    var from = db.schemaVersion || 1;
+
+    // 1 -> 2: "Mittagspause gemacht" wurde ohne Wochentags-Einschraenkung
+    // angelegt und zaehlte dadurch 7 statt 5 moegliche Tage pro Woche.
+    if (from < 2) {
+      db.habits.forEach(function (h) {
+        if (h.name === 'Mittagspause gemacht' && !h.activeWeekdays) {
+          h.activeWeekdays = WORKDAYS.slice();
+          h.updatedAt = nowIso();
+        }
+      });
+    }
+
+    if (from < SCHEMA_VERSION) {
+      db.schemaVersion = SCHEMA_VERSION;
+      return true;
+    }
+    return false;
+  }
+
   // Fehlende Felder ergaenzen, damit aeltere oder unvollstaendige Datenstaende
   // nicht zu Abstuerzen fuehren.
   function normalize(db) {
     var d = defaults();
     if (!db || typeof db !== 'object') return d;
-    db.schemaVersion = db.schemaVersion || SCHEMA_VERSION;
+    db.schemaVersion = db.schemaVersion || 1;
     db.meta = Object.assign({}, d.meta, db.meta || {});
     db.settings = Object.assign({}, d.settings, db.settings || {});
     db.habits = Array.isArray(db.habits) ? db.habits : d.habits;
@@ -98,6 +127,7 @@ window.Store = (function () {
     db.counts = Array.isArray(db.counts) ? db.counts : [];
     db.reflections = Array.isArray(db.reflections) ? db.reflections : [];
     db.reflectionMeta = Object.assign({}, d.reflectionMeta, db.reflectionMeta || {});
+    migrate(db);
     return db;
   }
 
@@ -125,7 +155,12 @@ window.Store = (function () {
       return cache;
     }
     try {
-      cache = normalize(JSON.parse(raw));
+      var parsed = JSON.parse(raw);
+      var wasVersion = parsed && parsed.schemaVersion;
+      cache = normalize(parsed);
+      // Migration sofort festschreiben, damit sie nicht bei jedem Start
+      // erneut laeuft.
+      if (cache.schemaVersion !== wasVersion) persist();
     } catch (e) {
       console.error('Daten unlesbar, starte mit Standardwerten', e);
       cache = defaults();
