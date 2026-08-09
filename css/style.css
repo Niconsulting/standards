@@ -1,0 +1,375 @@
+/* style.css — Darstellung.
+ *
+ * Zwei Grundregeln, die sich durch die ganze Datei ziehen:
+ *  1. Kein Rot, keine Warnfarben, keine Ausrufezeichen. Nicht erfuellt heisst
+ *     hier: neutral, unauffaellig, ohne Farbe. Erfuellt bekommt Farbe.
+ *  2. Alles Bedienbare liegt im unteren Bereich und ist mindestens 48px hoch,
+ *     damit es sich einhaendig mit dem Daumen treffen laesst.
+ */
+
+/* ---------- Farben ---------- */
+
+:root {
+  --bg: #F6F7F9;
+  --surface: #FFFFFF;
+  --surface-2: #EEF0F4;
+  --border: #E2E6EC;
+  --text: #1B1F27;
+  --muted: #6B7280;
+  --accent: #4C8A73;          /* erfuellt */
+  --accent-soft: rgba(76, 138, 115, .12);
+  --sand: #B58535;            /* Minimum-Markierung */
+  --sand-soft: rgba(181, 133, 53, .14);
+  --shadow: 0 1px 2px rgba(16, 20, 28, .06);
+  --radius: 14px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171D;
+    --surface: #1B1F27;
+    --surface-2: #232833;
+    --border: #2C333F;
+    --text: #E7EAF0;
+    --muted: #98A2B3;
+    --accent: #7FB09C;
+    --accent-soft: rgba(127, 176, 156, .16);
+    --sand: #E0B87A;
+    --sand-soft: rgba(224, 184, 122, .16);
+    --shadow: none;
+  }
+}
+
+/* Manuelle Auswahl in den Einstellungen schlaegt die Systemeinstellung */
+:root[data-theme="light"] {
+  --bg: #F6F7F9; --surface: #FFFFFF; --surface-2: #EEF0F4; --border: #E2E6EC;
+  --text: #1B1F27; --muted: #6B7280; --accent: #4C8A73;
+  --accent-soft: rgba(76, 138, 115, .12); --sand: #B58535;
+  --sand-soft: rgba(181, 133, 53, .14); --shadow: 0 1px 2px rgba(16, 20, 28, .06);
+}
+:root[data-theme="dark"] {
+  --bg: #14171D; --surface: #1B1F27; --surface-2: #232833; --border: #2C333F;
+  --text: #E7EAF0; --muted: #98A2B3; --accent: #7FB09C;
+  --accent-soft: rgba(127, 176, 156, .16); --sand: #E0B87A;
+  --sand-soft: rgba(224, 184, 122, .16); --shadow: none;
+}
+
+/* ---------- Grundlagen ---------- */
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 17px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: contain;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+svg { width: 22px; height: 22px; fill: none; stroke: currentColor;
+      stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.hidden { display: none !important; }
+
+/* Der Inhalt muss oben unter der Statusleiste und unten ueber der
+   Tab-Leiste und dem Home-Indikator liegen. */
+#main {
+  padding: calc(env(safe-area-inset-top) + 12px) 16px
+           calc(env(safe-area-inset-bottom) + 92px) 16px;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+/* ---------- Kopfbereich mit Navigation ---------- */
+
+.daynav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 20px;
+}
+
+.daynav-plain { min-height: 56px; }
+
+.daynav-label { flex: 1; text-align: center; min-width: 0; }
+.daynav-plain .daynav-label { text-align: left; }
+
+.daynav-label h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -.01em;
+}
+
+.daynav-sub {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.daynav-btn {
+  width: 44px; height: 44px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  color: var(--muted);
+  flex: none;
+}
+.daynav-btn:active { background: var(--surface-2); }
+.daynav-btn:disabled { opacity: .25; cursor: default; }
+
+/* ---------- Abschnitte und Karten ---------- */
+
+.section-title {
+  margin: 22px 4px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--muted);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.footnote {
+  margin: 18px 4px 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.placeholder {
+  color: var(--muted);
+  font-size: 15px;
+  padding: 24px 4px;
+}
+
+/* ---------- Zeile: taegliches Habit ---------- */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 60px;
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.row:last-child { border-bottom: none; }
+.row:active { background: var(--surface-2); }
+
+.row-text { flex: 1; min-width: 0; }
+
+.row-name { display: block; font-size: 16px; line-height: 1.3; }
+
+.row-meta {
+  display: block;
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+/* Das Haekchen liegt rechts, weil der Daumen dort landet. */
+.tick {
+  flex: none;
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  display: grid; place-items: center;
+  color: transparent;
+  transition: background-color .12s ease, border-color .12s ease;
+}
+.tick svg { width: 17px; height: 17px; stroke-width: 3; }
+
+.row.is-done .tick {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+.row.is-done .row-name { color: var(--muted); }
+
+/* ---------- Zeile: Wochenquote ---------- */
+
+.qrow {
+  padding: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.qrow:last-child { border-bottom: none; }
+
+.qrow-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.qrow-name { font-size: 16px; }
+
+.qrow-count {
+  font-size: 15px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.qrow.is-met .qrow-count { color: var(--accent); }
+
+/* Segmentbalken: die ersten Segmente sind das Minimum, der Rest ist Bonus. */
+.pips {
+  display: flex;
+  gap: 4px;
+  margin: 10px 0 12px;
+  align-items: center;
+}
+
+.pip {
+  height: 8px;
+  flex: 1;
+  border-radius: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.pip.is-bonus { opacity: .55; }
+.pip.is-on { background: var(--accent); border-color: var(--accent); }
+/* Die Grenze zum Bonusbereich wird markiert, nicht bewertet. */
+.pip.is-boundary { box-shadow: 2px 0 0 0 var(--sand); }
+
+.pip-extra {
+  font-size: 12px;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+  padding-left: 2px;
+}
+
+.qrow-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.stepper {
+  width: 48px; height: 48px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  display: grid; place-items: center;
+  color: var(--text);
+}
+.stepper:active { background: var(--border); }
+.stepper:disabled { opacity: .3; }
+.stepper svg { width: 20px; height: 20px; stroke-width: 2.5; }
+
+.qrow-today {
+  font-size: 13px;
+  color: var(--muted);
+  margin-right: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Reflexionskarte ---------- */
+
+.reflection {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  margin-bottom: 4px;
+  box-shadow: var(--shadow);
+}
+
+.reflection-kicker {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--sand);
+  margin: 0 0 8px;
+}
+
+.reflection-q {
+  margin: 0 0 16px;
+  font-size: 18px;
+  line-height: 1.4;
+}
+
+.reflection-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.btn {
+  min-height: 50px;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  width: 100%;
+}
+.btn:active { opacity: .7; }
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+
+.reflection-note {
+  margin: 12px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* ---------- Tab-Leiste ---------- */
+
+.tabbar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  display: flex;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(16px);
+  backdrop-filter: saturate(180%) blur(16px);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
+  z-index: 10;
+}
+
+.tab {
+  flex: 1;
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: var(--muted);
+  padding: 6px 0;
+}
+.tab span { font-size: 11px; letter-spacing: .01em; }
+.tab.is-active { color: var(--accent); }
+.tab:active { opacity: .6; }
