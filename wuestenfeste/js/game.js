@@ -831,6 +831,7 @@ const G = {
       u.dest = null; u.path = null;
       const sdx = (t.x - t.y) - (u.x - u.y);
       if (Math.abs(sdx) > 0.01) u.face = sdx > 0 ? 1 : -1;
+      u.faceX = t.x; u.faceY = t.y;
       if (u.cd <= 0) this.attackUnit(u, t, D);
       return 'ok';
     }
@@ -870,6 +871,7 @@ const G = {
   hitBuilding(u, b, D) {
     const sdx = (b.x + b.w / 2 - b.y - b.h / 2) - (u.x - u.y);
     if (Math.abs(sdx) > 0.01) u.face = sdx > 0 ? 1 : -1;
+    u.faceX = b.x + b.w / 2; u.faceY = b.y + b.h / 2;
     if (u.cd > 0) return;
     u.cd = D.cd * (0.9 + Math.random() * 0.2);
     u.atkT = 0.35;

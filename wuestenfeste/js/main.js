@@ -35,7 +35,8 @@ const Main = {
     R.buildTerrain();
     R.cam.z = 1;
     const k = G.bmap.get(G.s.players[0].keep);
-    R.centerOn(k.x + 4, k.y - 1);
+    R.cam.yaw = Math.PI / 4;
+    R.centerOn(k.x + 2.5, k.y + 0.5);
     this.begin();
     this.tips = [
       [1, 'Willkommen, Burgherr! Baue zuerst Holzfäller nahe den Palmen (Reiter „Wirtschaft“).'],
@@ -60,6 +61,7 @@ const Main = {
     this.closeAll();
     document.getElementById('top').hidden = false;
     document.getElementById('bottom').hidden = false;
+    document.getElementById('camctl').hidden = false;
     R.resize();
     this.running = true; this.paused = false; this.autoT = 0;
     this.setSpeed(1);
@@ -138,6 +140,7 @@ const Main = {
     this.closeAll();
     document.getElementById('top').hidden = true;
     document.getElementById('bottom').hidden = true;
+    document.getElementById('camctl').hidden = true;
     this.refreshSlots();
     this.openOverlay('menu');
   },
@@ -226,6 +229,8 @@ const Main = {
     on('helpClose', () => this.closeOverlay('help'));
     on('btnMenu', () => this.openPause());
     on('btnKeep', () => UI.openKeep());
+    on('rotL', () => R.rotate(-1));
+    on('rotR', () => R.rotate(1));
     on('btnMap', () => document.body.classList.toggle('showmap'));
     on('btnResume', () => this.closeOverlay('pause'));
     on('btnToMenu', () => this.toMenu());

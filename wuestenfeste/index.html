@@ -14,6 +14,11 @@
 <!--BODY-START-->
 <div id="app">
   <canvas id="view"></canvas>
+  <canvas id="ov"></canvas>
+  <div id="camctl" hidden>
+    <button id="rotL" title="Ansicht drehen (T)" aria-label="Ansicht nach links drehen">⟲</button>
+    <button id="rotR" title="Ansicht drehen (R)" aria-label="Ansicht nach rechts drehen">⟳</button>
+  </div>
 
   <header id="top" hidden>
     <div class="res" id="resbar"></div>
@@ -214,6 +219,7 @@
   </div>
 </div>
 <!--BODY-END-->
+<script src="lib/three.min.js"></script>
 <script src="js/util.js"></script>
 <script src="js/data.js"></script>
 <script src="js/world.js"></script>

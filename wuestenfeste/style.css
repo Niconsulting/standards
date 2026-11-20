@@ -22,6 +22,10 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: #1d1712; col
 button, select, input, textarea { font: inherit; color: inherit; }
 
 #app { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; }
+#ov { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+#camctl { position: absolute; right: 12px; bottom: 182px; z-index: 6; display: flex; gap: 6px; }
+#camctl button { width: 42px; height: 42px; border-radius: 50%; background: rgba(36,26,18,.9); border: 1px solid var(--line); color: var(--parch); font-size: 20px; cursor: pointer; box-shadow: 0 3px 10px rgba(0,0,0,.4); }
+#camctl button:hover { border-color: var(--brass); }
 #view { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: default; touch-action: none; -webkit-touch-callout: none; }
 button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 html, body { overscroll-behavior: none; }
@@ -302,4 +306,10 @@ textarea { width: 100%; font-family: ui-monospace, Menlo, Consolas, monospace; f
   .res { order: 5; flex-basis: 100%; }
   #msgs { top: calc(98px + env(safe-area-inset-top, 0px)); max-width: 70vw; }
   #pausedTag { top: calc(100px + env(safe-area-inset-top, 0px)); }
+}
+
+@media (pointer: coarse), (max-width: 900px) {
+  #camctl { right: max(8px, env(safe-area-inset-right, 0px)); bottom: calc(70px + env(safe-area-inset-bottom, 0px)); flex-direction: column; }
+  body.drawer #camctl { bottom: calc(156px + env(safe-area-inset-bottom, 0px)); }
+  body.showmap #camctl { bottom: calc(184px + env(safe-area-inset-bottom, 0px)); }
 }

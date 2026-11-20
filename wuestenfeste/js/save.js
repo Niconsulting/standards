@@ -31,7 +31,7 @@ const Save = {
         o.x = Math.round(u.x * 100) / 100; o.y = Math.round(u.y * 100) / 100; o.hp = Math.round(u.hp * 10) / 10;
         return o;
       }),
-      cam: { x: R.cam.x, y: R.cam.y, z: R.cam.z },
+      cam: { x: R.cam.x, y: R.cam.y, z: R.cam.z, yaw: R.cam.yaw, v: 3 },
     };
   },
 
@@ -80,7 +80,8 @@ const Save = {
     }
     if (!G.s.ai) AI.init();
     R.buildTerrain();
-    if (d.cam) { R.cam.x = d.cam.x; R.cam.y = d.cam.y; R.cam.z = d.cam.z || 1; }
+    if (d.cam && d.cam.v === 3) { R.cam.x = d.cam.x; R.cam.y = d.cam.y; R.cam.z = d.cam.z || 1; R.cam.yaw = d.cam.yaw || Math.PI / 4; }
+    else { const k = G.bmap.get(G.s.players[0].keep); if (k) R.centerOn(k.x + 1.5, k.y + 1.5); }
   },
 
   // ---------- Browser-Speicher ----------

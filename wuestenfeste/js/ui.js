@@ -28,6 +28,7 @@ const UI = {
     });
     this.buildBar();
     this.bindCanvas();
+    try { if (matchMedia('(pointer: coarse)').matches) this.setTouch(true); } catch (e) { /* egal */ }
     this.bindKeys();
     this.$('info').addEventListener('click', e => {
       const b = e.target.closest('[data-act]');
@@ -68,7 +69,7 @@ const UI = {
     a.title = 'Alle Soldaten auswählen (Q)';
     a.addEventListener('click', () => this.selectArmy());
     tabs.appendChild(a);
-    for (const t in BUILDINGS) if (!BUILDINGS[t].hidden) this.icons[t] = R.icon(t, 48);
+    for (const t in BUILDINGS) if (!BUILDINGS[t].hidden) this.icons[t] = R.icon(t, 112);
     this.setCat(this.cat);
   },
 
@@ -228,7 +229,8 @@ const UI = {
     const pts = [...this.ptrs.values()].slice(0, 2);
     if (pts.length < 2) { this.pinch = null; return; }
     const cx = (pts[0].x + pts[1].x) / 2, cy = (pts[0].y + pts[1].y) / 2;
-    this.pinch = { d0: Math.max(20, Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)), z0: R.cam.z, w0: R.screenToWorld(cx, cy) };
+    this.pinch = R.pinchStart(cx, cy);
+    this.pinch.d0 = Math.max(20, Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y));
   },
 
   pMove(e) {
@@ -242,17 +244,14 @@ const UI = {
       const pts = [...this.ptrs.values()].slice(0, 2);
       const cx = (pts[0].x + pts[1].x) / 2, cy = (pts[0].y + pts[1].y) / 2;
       const d = Math.max(20, Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y));
-      R.cam.z = U.clamp(this.pinch.z0 * d / this.pinch.d0, 0.45, 2.4);
-      R.cam.x = this.pinch.w0[0] - (cx - R.W / 2) / R.cam.z;
-      R.cam.y = this.pinch.w0[1] - (cy - R.H / 2) / R.cam.z;
-      R.clampCam();
+      R.pinchMove(this.pinch, cx, cy, d / this.pinch.d0);
       return;
     }
     const tg = this.tg;
     if (!tg || tg.cancel || tg.id !== e.pointerId) return;
     if (!tg.moved && Math.hypot(p.x - tg.sx, p.y - tg.sy) > 10) { tg.moved = true; clearTimeout(this.longT); }
     if (tg.long) { if (tg.moved) R.selRect = { x0: tg.sx, y0: tg.sy, x1: p.x, y1: p.y }; return; }
-    if (tg.moved) { R.cam.x -= (p.x - px) / R.cam.z; R.cam.y -= (p.y - py) / R.cam.z; R.clampCam(); }
+    if (tg.moved) R.panBy(p.x - px, p.y - py);
   },
 
   pUp(e, cancel) {
@@ -420,7 +419,7 @@ const UI = {
     this.mouse.x = e.clientX; this.mouse.y = e.clientY;
     if (!Main.running || !G.s) return;
     if (this.drag && this.drag.pan) {
-      R.cam.x -= (e.clientX - prevX) / R.cam.z; R.cam.y -= (e.clientY - prevY) / R.cam.z; R.clampCam();
+      R.panBy(e.clientX - prevX, e.clientY - prevY);
       return;
     }
     this.updateHover();
@@ -456,27 +455,16 @@ const UI = {
   },
 
   unitAt(mx, my) {
-    let best = null, bd = 16;
+    let best = null, bd = Math.max(16, R.pxPerTile() * 0.45);
     for (const u of G.s.units) {
       if (u.dead) continue;
-      const [sx, sy] = R.tileToScreen(u.x, u.y, u.z || 0);
-      const d = Math.hypot(sx - mx, (sy - 12 * R.cam.z) - my) / R.cam.z;
+      const [sx, sy] = R.unitScreen(u);
+      const d = Math.hypot(sx - mx, sy - my);
       if (d < bd) { bd = d; best = u; }
     }
     return best;
   },
-  buildingAt(mx, my) {
-    // Gebäude über die Höhe hinweg anklickbar: mehrere Kacheln entlang der Bildschirmsenkrechten prüfen
-    for (let k = 0; k <= 4; k++) {
-      const [fx, fy] = R.screenToTile(mx, my + k * HH * R.cam.z);
-      const x = Math.floor(fx), y = Math.floor(fy);
-      if (!World.inb(x, y)) continue;
-      const b = G.bmap.get(World.occ[World.idx(x, y)]);
-      if (b) return b;
-      if (k === 0 && World.inb(x, y)) { /* weiter suchen */ }
-    }
-    return null;
-  },
+  buildingAt(mx, my) { return R.pickBuilding(mx, my); },
 
   clickSelect(mx, my, add) {
     const u = this.unitAt(mx, my);
@@ -500,8 +488,8 @@ const UI = {
     const x0 = Math.min(r.x0, r.x1), x1 = Math.max(r.x0, r.x1), y0 = Math.min(r.y0, r.y1), y1 = Math.max(r.y0, r.y1);
     for (const u of G.s.units) {
       if (u.dead || u.owner !== 0 || u.type === 'peasant') continue;
-      const [sx, sy] = R.tileToScreen(u.x, u.y, u.z || 0);
-      if (sx >= x0 && sx <= x1 && sy - 10 >= y0 - 12 && sy - 10 <= y1 + 12) this.sel.add(u.id);
+      const [sx, sy] = R.unitScreen(u);
+      if (sx >= x0 - 6 && sx <= x1 + 6 && sy >= y0 - 10 && sy <= y1 + 10) this.sel.add(u.id);
     }
     this.selB = 0; this.inspectU = 0; this.lastInfo = '';
   },
@@ -511,7 +499,7 @@ const UI = {
     if (!u || u.owner !== 0 || u.type === 'peasant') return;
     for (const v of G.s.units) {
       if (v.dead || v.owner !== 0 || v.type !== u.type) continue;
-      const [sx, sy] = R.tileToScreen(v.x, v.y, v.z || 0);
+      const [sx, sy] = R.unitScreen(v);
       if (sx >= 0 && sy >= 0 && sx <= R.W && sy <= R.H) this.sel.add(v.id);
     }
     this.lastInfo = '';
@@ -558,18 +546,12 @@ const UI = {
       const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
       this.zoomAt(e.clientX, e.clientY, Math.exp(-dy * k));
     } else {
-      R.cam.x += e.deltaX / R.cam.z; R.cam.y += e.deltaY / R.cam.z; R.clampCam();
+      R.panBy(-e.deltaX, -e.deltaY);
     }
     this.updateHover();
   },
 
-  zoomAt(mx, my, f) {
-    const a = R.screenToWorld(mx, my);
-    R.cam.z = U.clamp(R.cam.z * f, 0.45, 2.2);
-    const b = R.screenToWorld(mx, my);
-    R.cam.x += a[0] - b[0]; R.cam.y += a[1] - b[1];
-    R.clampCam();
-  },
+  zoomAt(mx, my, f) { R.zoomAt(mx, my, f); },
 
   // ---------- Tastatur ----------
   bindKeys() {
@@ -584,6 +566,8 @@ const UI = {
       if (k === ' ') { e.preventDefault(); Main.togglePause(); }
       else if (k === '1' || k === '2' || k === '3') Main.setSpeed(+k);
       else if (k === 'h') Main.openOverlay('help');
+      else if (k === 'r') R.rotate(1);
+      else if (k === 't') R.rotate(-1);
       else if (k === 'b') this.openKeep();
       else if (k === 'q') this.selectArmy();
       else if (k === 'delete' || k === 'backspace') { const b = G.bmap.get(this.selB); if (b && b.owner === 0 && b.type !== 'keep') G.demolish(b); }
@@ -614,7 +598,7 @@ const UI = {
   // ---------- Laufende Aktualisierung ----------
   tick(dt) {
     if (!Main.running || !G.s) return;
-    const k = this.keys, sp = 750 * dt / R.cam.z;
+    const k = this.keys, sp = 700 * dt;
     let mx = 0, my = 0;
     if (k.w || k.arrowup) my -= sp;
     if (k.s || k.arrowdown) my += sp;
@@ -624,7 +608,7 @@ const UI = {
       const m = 4;
       if (this.mouse.x <= m) mx -= sp; if (this.mouse.x >= R.W - m) mx += sp;
     }
-    if (mx || my) { R.cam.x += mx; R.cam.y += my; R.clampCam(); this.updateHover(); }
+    if (mx || my) { R.panBy(-mx, -my); this.updateHover(); }
     this.refreshT -= dt;
     if (this.refreshT <= 0) {
       this.refreshT = 0.2;
