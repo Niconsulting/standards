@@ -51,7 +51,11 @@ const UI = {
     for (const c of BUILD_CATS) {
       const b = document.createElement('button');
       b.textContent = c.name; b.dataset.cat = c.id;
-      b.addEventListener('click', () => this.setCat(c.id));
+      b.addEventListener('click', () => {
+        if (this.touch && this.cat === c.id && this.drawer) { this.drawer = false; document.body.classList.remove('drawer'); if (this.mode === 'build') this.setMode('select'); this.refreshItems(); return; }
+        this.drawer = true; document.body.classList.add('drawer');
+        this.setCat(c.id);
+      });
       tabs.appendChild(b);
     }
     const d = document.createElement('button');
@@ -59,6 +63,11 @@ const UI = {
     d.title = 'Eigene Gebäude abreißen (halbe Kosten zurück)';
     d.addEventListener('click', () => this.setMode(this.mode === 'demolish' ? 'select' : 'demolish'));
     tabs.appendChild(d);
+    const a = document.createElement('button');
+    a.textContent = 'Truppen'; a.className = 'army'; a.dataset.cat = 'army';
+    a.title = 'Alle Soldaten auswählen (Q)';
+    a.addEventListener('click', () => this.selectArmy());
+    tabs.appendChild(a);
     for (const t in BUILDINGS) if (!BUILDINGS[t].hidden) this.icons[t] = R.icon(t, 48);
     this.setCat(this.cat);
   },
@@ -96,19 +105,22 @@ const UI = {
       el.classList.toggle('no', !G.canAfford(0, BUILDINGS[t].cost));
     }
     for (const b of this.$('tabs').children) {
-      b.classList.toggle('on', b.dataset.cat === 'demolish' ? this.mode === 'demolish' : b.dataset.cat === this.cat);
+      b.classList.toggle('on', b.dataset.cat === 'demolish' ? this.mode === 'demolish' : b.dataset.cat === 'army' ? false : b.dataset.cat === this.cat && (!this.touch || this.drawer));
     }
   },
 
   setBuild(t) {
     if (!t) { this.setMode('select'); return; }
+    this.hideBar(); this.drag = null; R.ghost = null;
     this.mode = 'build'; this.buildType = t;
     this.sel.clear(); this.selB = 0; this.inspectU = 0;
     this.refreshItems(); this.updateHint();
-    this.updateGhost();
+    if (!this.touch) this.updateGhost();
+    else G.msg('Tippe auf die Karte, um ' + BUILDINGS[t].name + ' zu platzieren.', 'info', 'tapbuild' + t, 30);
   },
   setMode(m) {
     this.mode = m;
+    this.hideBar();
     if (m !== 'build') { this.buildType = null; R.ghost = null; }
     this.drag = null;
     this.refreshItems(); this.updateHint();
@@ -120,10 +132,10 @@ const UI = {
     const t = this.hoverItem || (this.mode === 'build' ? this.buildType : null);
     if (t) {
       const D = BUILDINGS[t];
-      h.innerHTML = '<b>' + D.name + '</b> · ' + this.costText(D.cost) + ' · ' + D.desc + (this.mode === 'build' && !this.hoverItem ? ' · Rechtsklick: abbrechen' : '');
+      h.innerHTML = '<b>' + D.name + '</b> · ' + this.costText(D.cost) + ' · ' + D.desc + (this.mode === 'build' && !this.hoverItem ? this.T(' · Rechtsklick: abbrechen', ' · Nochmal antippen: abbrechen') : '');
     } else if (this.mode === 'demolish') {
-      h.innerHTML = '<b>Abreißen:</b> Klicke auf ein eigenes Gebäude. Du bekommst die Hälfte von Holz und Stein zurück. Rechtsklick: fertig.';
-    } else h.textContent = 'Wähle ein Gebäude aus. Linksklick setzt es, Rechtsklick bricht ab.';
+      h.innerHTML = '<b>Abreißen:</b> ' + this.T('Klicke', 'Tippe') + ' auf ein eigenes Gebäude. Du bekommst die Hälfte von Holz und Stein zurück.';
+    } else h.textContent = this.T('Wähle ein Gebäude aus. Linksklick setzt es, Rechtsklick bricht ab.', 'Wähle ein Gebäude, dann tippe auf die Karte.');
   },
 
   updateGhost() {
@@ -163,18 +175,212 @@ const UI = {
   // ---------- Leinwand ----------
   bindCanvas() {
     const cv = this.$('view');
-    cv.addEventListener('mousedown', e => this.onDown(e));
-    window.addEventListener('mousemove', e => this.onMove(e));
-    window.addEventListener('mouseup', e => this.onUp(e));
-    cv.addEventListener('contextmenu', e => { e.preventDefault(); this.onRight(e.clientX, e.clientY); });
+    this.ptrs = new Map();
+    cv.addEventListener('pointerdown', e => this.pDown(e));
+    window.addEventListener('pointermove', e => this.pMove(e));
+    window.addEventListener('pointerup', e => this.pUp(e, false));
+    window.addEventListener('pointercancel', e => this.pUp(e, true));
+    cv.addEventListener('contextmenu', e => e.preventDefault());
     cv.addEventListener('wheel', e => this.onWheel(e), { passive: false });
     cv.addEventListener('dblclick', e => this.onDbl(e));
     cv.addEventListener('mouseleave', () => { this.mouse.inside = false; });
     cv.addEventListener('mouseenter', () => { this.mouse.inside = true; });
-    // Safari: Pinch-Geste
-    let gs = 1;
-    cv.addEventListener('gesturestart', e => { e.preventDefault(); gs = 1; });
-    cv.addEventListener('gesturechange', e => { e.preventDefault(); this.zoomAt(this.mouse.x, this.mouse.y, e.scale / gs); gs = e.scale; });
+    // Safari/iOS: Browser-Zoom verhindern, Pinch übernimmt das Spiel
+    for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, e => e.preventDefault(), { passive: false });
+    document.addEventListener('touchmove', e => { if (e.target === cv) e.preventDefault(); }, { passive: false });
+    this.$('cbarOk').addEventListener('click', () => this.cbarAct(true));
+    this.$('cbarNo').addEventListener('click', () => this.cbarAct(false));
+  },
+
+  setTouch(on) {
+    if (this.touch === on) return;
+    this.touch = on;
+    document.body.classList.toggle('touch', on);
+    this.lastInfo = ''; this.updateHint();
+  },
+  T(mouse, touch) { return this.touch ? touch : mouse; },
+
+  pDown(e) {
+    if (e.pointerType === 'mouse') {
+      this.setTouch(false);
+      if (e.button === 2) { this.onRight(e.clientX, e.clientY); return; }
+      this.onDown(e);
+      return;
+    }
+    e.preventDefault();
+    this.setTouch(true);
+    if (!Main.running) return;
+    try { this.$('view').setPointerCapture(e.pointerId); } catch (err) { /* egal */ }
+    this.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (this.ptrs.size === 1) {
+      this.tg = { id: e.pointerId, sx: e.clientX, sy: e.clientY, moved: false, long: false, cancel: false };
+      clearTimeout(this.longT);
+      this.longT = setTimeout(() => this.onLong(), 450);
+    } else {
+      clearTimeout(this.longT);
+      if (this.tg) this.tg.cancel = true;
+      R.selRect = null;
+      this.startPinch();
+    }
+  },
+
+  startPinch() {
+    const pts = [...this.ptrs.values()].slice(0, 2);
+    if (pts.length < 2) { this.pinch = null; return; }
+    const cx = (pts[0].x + pts[1].x) / 2, cy = (pts[0].y + pts[1].y) / 2;
+    this.pinch = { d0: Math.max(20, Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)), z0: R.cam.z, w0: R.screenToWorld(cx, cy) };
+  },
+
+  pMove(e) {
+    if (e.pointerType === 'mouse') { this.onMove(e); return; }
+    const p = this.ptrs.get(e.pointerId);
+    if (!p) return;
+    const px = p.x, py = p.y;
+    p.x = e.clientX; p.y = e.clientY;
+    if (!Main.running) return;
+    if (this.ptrs.size >= 2 && this.pinch) {
+      const pts = [...this.ptrs.values()].slice(0, 2);
+      const cx = (pts[0].x + pts[1].x) / 2, cy = (pts[0].y + pts[1].y) / 2;
+      const d = Math.max(20, Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y));
+      R.cam.z = U.clamp(this.pinch.z0 * d / this.pinch.d0, 0.45, 2.4);
+      R.cam.x = this.pinch.w0[0] - (cx - R.W / 2) / R.cam.z;
+      R.cam.y = this.pinch.w0[1] - (cy - R.H / 2) / R.cam.z;
+      R.clampCam();
+      return;
+    }
+    const tg = this.tg;
+    if (!tg || tg.cancel || tg.id !== e.pointerId) return;
+    if (!tg.moved && Math.hypot(p.x - tg.sx, p.y - tg.sy) > 10) { tg.moved = true; clearTimeout(this.longT); }
+    if (tg.long) { if (tg.moved) R.selRect = { x0: tg.sx, y0: tg.sy, x1: p.x, y1: p.y }; return; }
+    if (tg.moved) { R.cam.x -= (p.x - px) / R.cam.z; R.cam.y -= (p.y - py) / R.cam.z; R.clampCam(); }
+  },
+
+  pUp(e, cancel) {
+    if (e.pointerType === 'mouse') { this.onUp(e); return; }
+    const p = this.ptrs.get(e.pointerId);
+    this.ptrs.delete(e.pointerId);
+    if (!p) return;
+    if (this.ptrs.size === 1) {
+      // vom Zoomen zurück zum Verschieben mit dem verbleibenden Finger
+      const [id, q] = [...this.ptrs.entries()][0];
+      this.pinch = null;
+      this.tg = { id, sx: q.x, sy: q.y, moved: true, long: false, cancel: false };
+      return;
+    }
+    if (this.ptrs.size > 1) { this.startPinch(); return; }
+    clearTimeout(this.longT);
+    const tg = this.tg;
+    this.tg = null; this.pinch = null;
+    if (!tg || tg.cancel || cancel || tg.id !== e.pointerId) { R.selRect = null; return; }
+    if (tg.long) {
+      if (R.selRect) { this.boxSelect(R.selRect, false); R.selRect = null; }
+      else this.clickSelect(p.x, p.y, false);
+      return;
+    }
+    if (!tg.moved) this.onTap(p.x, p.y);
+  },
+
+  onLong() {
+    const tg = this.tg;
+    if (!tg || tg.moved || tg.cancel || this.mode !== 'select') return;
+    tg.long = true;
+    const t = R.screenToTile(tg.sx, tg.sy);
+    G.fx.push({ k: 'mark', x: t[0], y: t[1], t: 0, dur: 0.5, c: '#ffe7a0', r: 0.8 });
+    if (!this.hintLong) { this.hintLong = true; G.msg('Halten und ziehen: Soldaten einrahmen. Loslassen ohne Ziehen: auswählen.', 'info'); }
+  },
+
+  onTap(x, y) {
+    if (!Main.running) return;
+    const now = performance.now();
+    const dbl = this.lastTap && now - this.lastTap.t < 330 && Math.hypot(x - this.lastTap.x, y - this.lastTap.y) < 30;
+    this.lastTap = { t: now, x, y };
+    if (this.mode === 'build') { this.touchPlace(x, y); return; }
+    if (this.mode === 'demolish') {
+      const b = this.buildingAt(x, y);
+      if (b && b.owner === 0) {
+        if (b.type === 'keep') G.msg('Den Burgfried kannst du nicht abreißen.', 'warn');
+        else this.showBar(BUILDINGS[b.type].name + ' abreißen?', 'Abreißen', () => G.demolish(b));
+      }
+      return;
+    }
+    if (this.sel.size) {
+      const u = this.unitAt(x, y);
+      if (u && u.owner === 0 && u.type !== 'peasant') {
+        if (dbl) this.onDbl({ clientX: x, clientY: y });
+        else this.clickSelect(x, y, true);
+        return;
+      }
+      this.onRight(x, y);
+      return;
+    }
+    this.clickSelect(x, y, false);
+    if (dbl) this.onDbl({ clientX: x, clientY: y });
+  },
+
+  // Bauen per Fingertipp: erst Vorschau, dann bestätigen
+  touchPlace(x, y) {
+    const [fx, fy] = R.screenToTile(x, y);
+    const tx = Math.floor(fx), ty = Math.floor(fy);
+    if (!World.inb(tx, ty)) return;
+    const t = this.buildType;
+    if (t === 'wall') {
+      if (!this.drag || !this.drag.wall) {
+        this.drag = { wall: true, x0: tx, y0: ty };
+        R.hover = { x: tx, y: ty, fx, fy };
+        this.updateGhost();
+        this.showBar('Mauer: Tippe jetzt auf den Endpunkt.', null, null);
+        return;
+      }
+      R.hover = { x: tx, y: ty, fx, fy };
+      this.updateGhost();
+      const n = R.ghost && R.ghost.line ? R.ghost.line.filter(q => q.ok).length : 0;
+      this.showBar(n ? 'Mauer mit ' + n + ' Feldern bauen? · ' + n + ' Stein' : 'Hier geht keine Mauer.', n ? 'Bauen' : null, () => { this.buildWallLine(); this.drag = null; R.ghost = null; });
+      return;
+    }
+    const prev = R.ghost;
+    R.hover = { x: tx, y: ty, fx, fy };
+    this.updateGhost();
+    const g = R.ghost;
+    if (!g) return;
+    const D = BUILDINGS[t];
+    // zweites Tippen auf dieselbe Stelle baut sofort
+    if (prev && !prev.line && prev.x === g.x && prev.y === g.y && g.ok && this.cbarOpen) { this.cbarAct(true); return; }
+    if (g.ok) {
+      this.showBar(D.name + ' hier bauen? · ' + this.costText(D.cost), 'Bauen', () => {
+        const b = G.tryBuild(t, 0, g.x, g.y);
+        if (b) this.afterBuild(b);
+        R.ghost = null;
+      });
+    } else this.showBar(G.canPlace(t, 0, g.x, g.y) || ('Nicht genug ' + G.missing(0, D.cost).join(' und ')), null, null);
+  },
+
+  showBar(text, okLabel, cb) {
+    this.$('cbarText').textContent = text;
+    const ok = this.$('cbarOk');
+    ok.hidden = !okLabel;
+    if (okLabel) ok.textContent = okLabel;
+    this.cbarCb = cb;
+    this.$('cbar').hidden = false;
+    this.cbarOpen = true;
+  },
+  hideBar() { this.$('cbar').hidden = true; this.cbarOpen = false; this.cbarCb = null; },
+  cbarAct(ok) {
+    const cb = this.cbarCb;
+    this.hideBar();
+    if (ok && cb) cb();
+    else if (!ok && this.mode === 'build') { this.drag = null; R.ghost = null; }
+    this.lastInfo = '';
+  },
+
+  buildWallLine() {
+    const line = R.ghost && R.ghost.line ? R.ghost.line : [];
+    let failed = false;
+    for (const t of line) {
+      if (G.canPlace('wall', 0, t.x, t.y)) continue;
+      if (!G.canAfford(0, BUILDINGS.wall.cost)) { failed = true; break; }
+      G.tryBuild('wall', 0, t.x, t.y, true);
+    }
+    if (failed) G.msg('Nicht genug Stein für die ganze Mauer.', 'warn', 'afford', 1.5);
   },
 
   onDown(e) {
@@ -205,8 +411,8 @@ const UI = {
   },
 
   afterBuild(b) {
-    if (b.type === 'barracks' && !this.hintBar) { this.hintBar = true; G.msg('Kaserne steht! Klicke sie an, um Soldaten auszubilden.', 'good'); }
-    if (b.type === 'tower' && !this.hintTower) { this.hintTower = true; G.msg('Wähle Bogenschützen und rechtsklicke den Turm, um ihn zu besetzen.', 'good'); }
+    if (b.type === 'barracks' && !this.hintBar) { this.hintBar = true; G.msg('Kaserne steht! ' + this.T('Klicke', 'Tippe') + ' sie an, um Soldaten auszubilden.', 'good'); }
+    if (b.type === 'tower' && !this.hintTower) { this.hintTower = true; G.msg(this.T('Wähle Bogenschützen und rechtsklicke den Turm, um ihn zu besetzen.', 'Wähle Bogenschützen und tippe auf den Turm, um ihn zu besetzen.'), 'good'); }
   },
 
   onMove(e) {
@@ -237,14 +443,7 @@ const UI = {
     const d = this.drag;
     this.drag = null;
     if (d.wall) {
-      const line = R.ghost && R.ghost.line ? R.ghost.line : [];
-      let built = 0, failed = false;
-      for (const t of line) {
-        if (G.canPlace('wall', 0, t.x, t.y)) continue;
-        if (!G.canAfford(0, BUILDINGS.wall.cost)) { failed = true; break; }
-        if (G.tryBuild('wall', 0, t.x, t.y, true)) built++;
-      }
-      if (failed) G.msg('Nicht genug Stein für die ganze Mauer.', 'warn', 'afford', 1.5);
+      this.buildWallLine();
       this.updateGhost();
       return;
     }
@@ -385,8 +584,8 @@ const UI = {
       if (k === ' ') { e.preventDefault(); Main.togglePause(); }
       else if (k === '1' || k === '2' || k === '3') Main.setSpeed(+k);
       else if (k === 'h') Main.openOverlay('help');
-      else if (k === 'b') { this.sel.clear(); this.inspectU = 0; this.selB = G.s.players[0].keep; this.lastInfo = ''; const kb = G.bmap.get(this.selB); if (kb) R.centerOn(kb.x + 1.5, kb.y + 1.5); }
-      else if (k === 'q') { this.sel.clear(); this.selB = 0; for (const u of G.s.units) if (u.owner === 0 && u.type !== 'peasant' && !u.dead) this.sel.add(u.id); this.lastInfo = ''; }
+      else if (k === 'b') this.openKeep();
+      else if (k === 'q') this.selectArmy();
       else if (k === 'delete' || k === 'backspace') { const b = G.bmap.get(this.selB); if (b && b.owner === 0 && b.type !== 'keep') G.demolish(b); }
       else if (k === '+' || k === '=') this.zoomAt(R.W / 2, R.H / 2, 1.15);
       else if (k === '-') this.zoomAt(R.W / 2, R.H / 2, 1 / 1.15);
@@ -394,6 +593,20 @@ const UI = {
     });
     window.addEventListener('keyup', e => { this.keys[e.key.toLowerCase()] = false; });
     window.addEventListener('blur', () => { this.keys = {}; });
+  },
+
+  selectArmy() {
+    if (!Main.running) return;
+    if (this.mode !== 'select') this.setMode('select');
+    this.sel.clear(); this.selB = 0; this.inspectU = 0;
+    for (const u of G.s.units) if (u.owner === 0 && u.type !== 'peasant' && !u.dead) this.sel.add(u.id);
+    if (!this.sel.size) G.msg('Du hast noch keine Soldaten. Baue eine Kaserne.', 'warn', 'noarmy', 5);
+    this.lastInfo = '';
+  },
+  openKeep() {
+    if (!Main.running) return;
+    this.sel.clear(); this.inspectU = 0; this.selB = G.s.players[0].keep; this.keepOpen = true; this.lastInfo = '';
+    const kb = G.bmap.get(this.selB); if (kb) R.centerOn(kb.x + 1.5, kb.y + 1.5);
   },
 
   unselect(id) { this.sel.delete(id); if (this.inspectU === id) this.inspectU = 0; },
@@ -458,8 +671,11 @@ const UI = {
     if (units.length) html = this.infoUnits(units);
     else if (iu) html = this.infoSingle(iu);
     else if (b) html = this.infoBuilding(b);
-    else html = this.infoKeep(true);
-    if (html !== this.lastInfo) { this.$('info').innerHTML = html; this.lastInfo = html; }
+    else if (!this.touch || this.keepOpen) html = this.infoKeep(true);
+    if (html && this.touch) html = '<button class="close" data-act="close" aria-label="Schließen">×</button>' + html;
+    const el = this.$('info');
+    el.classList.toggle('empty', !html);
+    if (html !== this.lastInfo) { el.innerHTML = html; this.lastInfo = html; }
   },
 
   hp(o) { return '<div class="hpbar"><i style="width:' + Math.max(0, Math.round(o.hp / o.maxHp * 100)) + '%;background:' + (o.hp / o.maxHp > 0.5 ? 'var(--good)' : o.hp / o.maxHp > 0.25 ? 'var(--warn)' : 'var(--bad)') + '"></i></div>'; },
@@ -481,14 +697,14 @@ const UI = {
       '<span class="' + cls(f.steuern) + '">Steuern ' + sgn(f.steuern) + '</span>' +
       (f.kapelle ? '<span class="p">Kapelle +' + f.kapelle + '</span>' : '') +
       '<span class="' + cls(f.gesamt) + '"><b>Gesamt ' + sgn(f.gesamt) + '</b></span></div>' +
-      '<p>Eine Runde dauert ' + ECON_TICK + ' Sekunden. Rationen und Steuern wirken ab der nächsten Runde.</p>';
+      '<p class="note">Eine Runde dauert ' + ECON_TICK + ' Sekunden. Rationen und Steuern wirken ab der nächsten Runde.</p>';
   },
 
   infoBuilding(b) {
     const D = BUILDINGS[b.type];
     if (b.type === 'keep' && b.owner === 0) return this.infoKeep(false) + this.hp(b);
     let h = '<h3>' + D.name + ' <small>' + (b.owner === 0 ? 'dein Gebäude' : 'feindlich') + ' · ' + Math.max(0, Math.round(b.hp)) + ' / ' + b.maxHp + '</small></h3>' + this.hp(b);
-    if (b.owner !== 0) return h + '<p>Wähle Soldaten und rechtsklicke das Gebäude, um es anzugreifen.</p>';
+    if (b.owner !== 0) return h + '<p>' + this.T('Wähle Soldaten und rechtsklicke das Gebäude, um es anzugreifen.', 'Wähle Soldaten und tippe auf das Gebäude, um es anzugreifen.') + '</p>';
     h += '<p>' + D.desc + '</p>';
     if (D.worker) {
       const w = G.umap.get(b.worker);
@@ -499,7 +715,7 @@ const UI = {
     if (D.housing) h += '<p>Wohnraum: ' + D.housing + ' Bauern.</p>';
     if (b.type === 'barracks') h += this.recruitBox();
     if (b.type === 'tower') {
-      h += '<p>Besatzung: ' + b.garrison.length + ' / 4. Wähle Soldaten und rechtsklicke den Turm.</p>';
+      h += '<p>Besatzung: ' + b.garrison.length + ' / 4. ' + this.T('Wähle Soldaten und rechtsklicke den Turm.', 'Wähle Soldaten und tippe auf den Turm.') + '</p>';
       if (b.garrison.length) h += '<div class="act"><button data-act="ungarrison">Besatzung auswählen</button></div>';
     }
     if (b.type !== 'keep') h += '<div class="act"><button class="danger" data-act="demolish">Abreißen</button></div>';
@@ -516,7 +732,7 @@ const UI = {
       const ok = G.canAfford(0, D.cost) && pc.idle > 0;
       h += '<button data-act="recruit:' + t + '" class="' + (ok ? '' : 'no') + '" title="' + D.desc + '"><b>' + D.name + '</b><small>' + this.costText(D.cost) + '</small><small>' + (cnt[t] || 0) + ' im Dienst</small></button>';
     }
-    h += '</div><p>' + pc.idle + ' freie Bauern am Lagerfeuer. Umschalt + Klick bildet 5 aus.</p>';
+    h += '</div><p>' + pc.idle + ' freie Bauern am Lagerfeuer.' + this.T(' Umschalt + Klick bildet 5 aus.', '') + '</p>';
     return h;
   },
 
@@ -526,8 +742,8 @@ const UI = {
     let h = '<h3>' + (units.length === 1 ? UNITS[units[0].type].name : units.length + ' Soldaten') + '</h3>';
     if (units.length === 1) h += this.hp(units[0]) + '<p>' + UNITS[units[0].type].desc + '</p>';
     else h += '<div class="unitlist">' + SOLDIER_TYPES.filter(t => cnt[t]).map(t => '<span>' + cnt[t] + '× ' + UNITS[t].name + '</span>').join('') + '</div>';
-    h += '<p>Rechtsklick: bewegen · auf Feind: angreifen · auf eigenen Wachturm: besetzen. Doppelklick wählt alle gleichen Soldaten.</p>';
-    if (units.some(u => u.tower)) h += '<div class="act"><button data-act="leave">Turm verlassen</button></div>';
+    h += '<p>' + this.T('Rechtsklick: bewegen · auf Feind: angreifen · auf eigenen Wachturm: besetzen. Doppelklick wählt alle gleichen Soldaten.', 'Tippe auf die Karte: bewegen · auf Feind: angreifen · auf eigenen Turm: besetzen. Halten und ziehen: einrahmen.') + '</p>';
+    h += '<div class="act">' + (units.some(u => u.tower) ? '<button data-act="leave">Turm verlassen</button>' : '') + '<button data-act="deselect">Auswahl aufheben</button></div>';
     return h;
   },
 
@@ -556,6 +772,8 @@ const UI = {
     } else if (a === 'ungarrison') {
       const b = G.bmap.get(this.selB);
       if (b) { this.sel = new Set(b.garrison); this.selB = 0; }
+    } else if (a === 'deselect' || a === 'close') {
+      this.sel.clear(); this.selB = 0; this.inspectU = 0; this.keepOpen = false;
     } else if (a === 'leave') {
       const units = [...this.sel].map(id => G.umap.get(id)).filter(Boolean);
       for (const u of units) { G.leaveTower(u); u.order = { t: 'idle', gx: u.x, gy: u.y }; }

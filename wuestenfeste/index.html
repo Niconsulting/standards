@@ -2,7 +2,9 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#241a13">
 <title>Wüstenfeste</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+SC:wght@500;700&family=Alegreya+Sans:wght@400;500;700&display=swap">
@@ -24,12 +26,19 @@
       <button id="sp2" title="Schnell (2)">2×</button>
       <button id="sp3" title="Sehr schnell (3)">3×</button>
     </div>
+    <button id="btnKeep" class="ghostbtn wide" title="Burgfried: Steuern und Rationen (B)">Burg</button>
+    <button id="btnMap" class="ghostbtn wide mobile-only" title="Übersichtskarte">Karte</button>
     <button id="btnHelp" class="ghostbtn" title="Anleitung (H)">?</button>
     <button id="btnMenu" class="menubtn">Menü</button>
   </header>
 
   <div id="msgs" aria-live="polite"></div>
   <div id="pausedTag" hidden>Pausiert</div>
+  <div id="cbar" hidden>
+    <span id="cbarText"></span>
+    <button id="cbarNo">Abbrechen</button>
+    <button id="cbarOk" class="primary">Bauen</button>
+  </div>
 
   <footer id="bottom" hidden>
     <section id="build">
@@ -78,6 +87,10 @@
     </div>
   </div>
 
+  <div class="overlay" id="loading" hidden>
+    <div class="panel narrow center"><h2>Die Wüste entsteht …</h2><p class="small">Die Karte wird gezeichnet.</p></div>
+  </div>
+
   <!-- Spielmenü -->
   <div class="overlay" id="pause" hidden>
     <div class="panel">
@@ -88,6 +101,7 @@
         <button id="btnImport2">Importieren …</button>
       </div>
       <div class="row">
+        <button id="btnHelp3">Anleitung</button>
         <button id="btnToMenu">Hauptmenü</button>
         <button class="primary" id="btnResume">Weiterspielen</button>
       </div>
@@ -149,7 +163,16 @@
             <li>Bogenschützen auf <b>Wachtürmen</b> schießen weiter und sind geschützt.</li>
             <li><b>Mauern</b> durch Ziehen bauen. <b>Tore</b> lassen nur deine Leute durch – vergiss sie nicht, sonst kommen deine Arbeiter nicht hinaus.</li>
           </ul>
-          <h3>Steuerung</h3>
+          <h3>Am Handy / Tablet</h3>
+          <table class="keys">
+            <tr><td>Ein Finger ziehen</td><td>Karte verschieben</td></tr>
+            <tr><td>Zwei Finger</td><td>Zoomen und verschieben</td></tr>
+            <tr><td>Tippen</td><td>Auswählen · mit gewählten Soldaten: bewegen, angreifen, Turm besetzen</td></tr>
+            <tr><td>Halten + ziehen</td><td>Soldaten einrahmen</td></tr>
+            <tr><td>Bauen</td><td>Gebäude wählen, auf die Karte tippen, mit „Bauen“ bestätigen</td></tr>
+            <tr><td>Mauer</td><td>Anfang tippen, Ende tippen, bestätigen</td></tr>
+          </table>
+          <h3>Mit Maus und Tastatur</h3>
           <table class="keys">
             <tr><td>Linksklick</td><td>Auswählen, bauen</td></tr>
             <tr><td>Ziehen</td><td>Soldaten einrahmen / Mauer ziehen</td></tr>

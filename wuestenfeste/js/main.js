@@ -25,6 +25,10 @@ const Main = {
 
   // ---------- Spiel starten ----------
   startNew() {
+    this.openOverlay('loading');
+    setTimeout(() => this.startNew2(), 60);
+  },
+  startNew2() {
     const diff = document.getElementById('optDiff').value;
     const peace = +document.getElementById('optPeace').value;
     G.newGame({ difficulty: diff, peace });
@@ -218,8 +222,11 @@ const Main = {
     on('btnExport', () => this.openXfer('export'));
     on('btnHelp', () => this.openOverlay('help'));
     on('btnHelp2', () => this.openOverlay('help'));
+    on('btnHelp3', () => this.openOverlay('help'));
     on('helpClose', () => this.closeOverlay('help'));
     on('btnMenu', () => this.openPause());
+    on('btnKeep', () => UI.openKeep());
+    on('btnMap', () => document.body.classList.toggle('showmap'));
     on('btnResume', () => this.closeOverlay('pause'));
     on('btnToMenu', () => this.toMenu());
     on('spPause', () => this.togglePause());
