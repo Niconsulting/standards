@@ -24,14 +24,15 @@ const Main = {
   },
 
   // ---------- Spiel starten ----------
-  startNew() {
+  startNew(missionId) {
     this.openOverlay('loading');
-    setTimeout(() => this.startNew2(), 60);
+    setTimeout(() => this.startNew2(missionId), 60);
   },
-  startNew2() {
-    const diff = document.getElementById('optDiff').value;
-    const peace = +document.getElementById('optPeace').value;
-    G.newGame({ difficulty: diff, peace });
+  startNew2(missionId) {
+    const m = missionId ? Campaign.get(missionId) : null;
+    const diff = m ? m.diff : document.getElementById('optDiff').value;
+    const peace = m ? (m.peace || 99) : +document.getElementById('optPeace').value;
+    G.newGame({ difficulty: diff, peace, mission: m ? { id: m.id } : null, seed: m ? 1000 + m.id * 77 : 0 });
     R.buildTerrain();
     R.cam.z = 1;
     const k = G.bmap.get(G.s.players[0].keep);
@@ -45,7 +46,8 @@ const Main = {
       [70, 'Mehr Hütten bringen mehr Bauern. Mit einer Kaserne bildest du Soldaten aus.'],
       [110, 'Umschließe deine Burg mit Mauern und Türmen – und setze Tore, damit deine Arbeiter hinauskommen.'],
     ];
-    G.msg('Der Wüstenfürst greift frühestens nach ' + peace + ' Minuten an.', 'info');
+    if (m) { this.tips = this.tips.slice(0, m.id <= 2 ? 5 : 0); G.msg(m.intro, 'info'); }
+    else G.msg('Der Wüstenfürst greift frühestens nach ' + peace + ' Minuten an.', 'info');
   },
 
   startLoaded(data) {
@@ -62,6 +64,7 @@ const Main = {
     document.getElementById('top').hidden = false;
     document.getElementById('bottom').hidden = false;
     document.getElementById('camctl').hidden = false;
+    document.getElementById('troops').hidden = false;
     R.resize();
     this.running = true; this.paused = false; this.autoT = 0;
     this.setSpeed(1);
@@ -109,6 +112,7 @@ const Main = {
     if (this.overlays.has('confirm')) { this.closeOverlay('confirm'); return; }
     if (this.overlays.has('xfer')) { this.closeOverlay('xfer'); return; }
     if (this.overlays.has('help')) { this.closeOverlay('help'); return; }
+    if (this.overlays.has('infoModal')) { this.closeOverlay('infoModal'); return; }
     if (this.overlays.has('pause')) { this.closeOverlay('pause'); return; }
     if (!this.running) return;
     if (UI.mode !== 'select') { UI.setMode('select'); return; }
@@ -119,12 +123,17 @@ const Main = {
   gameOver(r) {
     Save.remove('auto');
     const t = document.getElementById('endTitle');
-    t.textContent = r === 'win' ? 'Sieg!' : 'Niederlage';
+    const mi = G.s.mission ? Campaign.get(G.s.mission.id) : null;
+    t.textContent = r === 'win' ? (mi ? 'Mission geschafft!' : 'Sieg!') : 'Niederlage';
     t.style.color = r === 'win' ? 'var(--brass-2)' : 'var(--bad)';
-    document.getElementById('endText').textContent = r === 'win'
-      ? 'Der Burgfried des Wüstenfürsten ist gefallen. Die Wüste gehört dir – ' + G.dateText() + '.'
-      : 'Dein Burgfried ist gefallen. Der Wüstenfürst hat gesiegt – ' + G.dateText() + '.';
-    setTimeout(() => this.openOverlay('end'), 1200);
+    document.getElementById('endText').textContent = mi
+      ? (r === 'win' ? '„' + mi.name + '“ ist erfüllt.' + (Campaign.get(mi.id + 1) ? ' Die nächste Mission „' + Campaign.get(mi.id + 1).name + '“ ist freigeschaltet.' : ' Du hast die Kampagne abgeschlossen!') : (G.s.mission.failText || 'Dein Burgfried ist gefallen.') + ' Versuch es noch einmal.')
+      : r === 'win'
+        ? 'Der Burgfried des Wüstenfürsten ist gefallen. Die Wüste gehört dir – ' + G.dateText() + '.'
+        : 'Dein Burgfried ist gefallen. Der Wüstenfürst hat gesiegt – ' + G.dateText() + '.';
+    document.getElementById('endText').textContent += ' Besiegte Feinde: ' + ((G.s.stats || {}).kills || 0) + ', eigene Verluste: ' + ((G.s.stats || {}).lost || 0) + '.';
+    const gs = G.s;
+    setTimeout(() => { if (this.running && G.s === gs) this.openOverlay('end'); }, 1200);
   },
 
   // ---------- Overlays ----------
@@ -141,6 +150,8 @@ const Main = {
     document.getElementById('top').hidden = true;
     document.getElementById('bottom').hidden = true;
     document.getElementById('camctl').hidden = true;
+    document.getElementById('troops').hidden = true;
+    document.getElementById('goals').hidden = true;
     this.refreshSlots();
     this.openOverlay('menu');
   },
@@ -190,6 +201,20 @@ const Main = {
       if (!el.children.length) el.innerHTML = '<p class="small">Noch keine Spielstände. Das Spiel speichert jede Minute automatisch.</p>';
     };
     render(document.getElementById('menuSlots'), false);
+    const ml = document.getElementById('missions');
+    ml.innerHTML = '';
+    const un = Campaign.unlocked();
+    for (const m of Campaign.MISSIONS) {
+      const row = document.createElement('div');
+      row.className = 'slot' + (m.id > un ? ' locked' : '');
+      row.innerHTML = '<div class="meta"><b>' + m.id + '. ' + m.name + (m.id < un ? ' ✓' : '') + '</b><small>' + (m.id > un ? 'Gesperrt – schaffe zuerst Mission ' + (m.id - 1) : m.goals.join(' · ')) + '</small></div>';
+      const b = document.createElement('button');
+      b.textContent = 'Starten'; b.disabled = m.id > un;
+      b.addEventListener('click', () => this.startNew(m.id));
+      row.appendChild(document.createElement('span'));
+      row.appendChild(b);
+      ml.appendChild(row);
+    }
     render(document.getElementById('pauseSlots'), true);
   },
 

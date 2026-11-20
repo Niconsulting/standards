@@ -1001,6 +1001,8 @@ const R = {
       const variant = this.variantOf(b);
       const key = (b.level || 1) + ':' + variant;
       if (v.key !== key) { v.mesh.geometry = this.geoFor(b.type, b.owner, b.level, variant); v.key = key; }
+      if (b.type === 'trap') v.group.visible = b.owner === 0;
+      if (b.burn > 0 && Math.random() < dt * 30) this.emit(b.x + Math.random(), 0.1, b.y + Math.random(), Math.random() < 0.3 ? 'smoke' : 'fire');
       // Treffer: kurz wackeln
       if (b.hitT > 0) { b.hitT -= dt; v.mesh.position.x = Math.sin(this.t * 60) * 0.02; } else v.mesh.position.x = 0;
       if (v.flag) {
@@ -1229,10 +1231,11 @@ const R = {
       for (const t of gh.line) {
         tilePlane(t.x, t.y, t.ok);
         if (!t.ok) continue;
+        if (t.type && t.type !== 'wall') { model(t.type, t.x, t.y, true, ''); continue; }
         let mask = 0;
         [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([dx, dy], i) => { if (set.has((t.x + dx) + ',' + (t.y + dy))) mask |= 1 << i; });
         [[1, 1], [1, -1], [-1, 1], [-1, -1]].forEach(([dx, dy], i) => { if (set.has((t.x + dx) + ',' + (t.y + dy)) && !set.has((t.x + dx) + ',' + t.y) && !set.has(t.x + ',' + (t.y + dy))) mask |= 1 << (i + 4); });
-        model(gh.type, t.x, t.y, true, String(mask));
+        model(t.type || gh.type, t.x, t.y, true, gh.type === 'wall' || gh.type === 'palisade' ? String(mask) : '');
       }
       return;
     }
@@ -1414,7 +1417,7 @@ const R = {
         this.iconR.toneMapping = THREE.ACESFilmicToneMapping;
         this.iconR.setSize(size, size, false);
         this.iconScene = new THREE.Scene();
-        this.iconScene.add(new THREE.HemisphereLight(0xdfeaff, 0xc9a46c, 0.8));
+        this.iconScene.add(new THREE.HemisphereLight(0xdfeaff, 0xc9a46c, 1.0));
         const s = new THREE.DirectionalLight(0xffeedd, 1.4); s.position.set(-3, 6, 4); this.iconScene.add(s);
         this.iconCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
       } catch (e) { return ''; }
@@ -1431,8 +1434,7 @@ const R = {
       if (p.extra.legs === 4) for (const [x, z] of [[-0.07, -0.22], [0.07, -0.22], [-0.07, 0.22], [0.07, 0.22]]) { const l = new THREE.Mesh(this.legGeo(0x5e3e22, p.extra.legH), this.mat); l.position.set(x, p.extra.legH, z); obj.add(l); }
       obj.rotation.y = 0.5;
       obj.position.set(0, 0, 0);
-      w = h = 0.9; H = type === 'pike' ? 1.4 : 0.9;
-      obj.position.x = -0; obj.position.z = 0;
+      w = h = 0; H = 0;
     } else {
       const D = BUILDINGS[type];
       const m = new THREE.Mesh(this.geoFor(type, 0, 1, type === 'wall' || type === 'palisade' ? '3' : type === 'stockpile' ? '221' : ''), this.mat);
@@ -1441,10 +1443,11 @@ const R = {
       w = D.w; h = D.h; H = BUILD_H[type] || 1.2;
     }
     scene.add(obj);
-    const ext = Math.max(w, h) * 0.85 + H * 0.5;
+    const isU = kind === 'unit';
+    const ext = isU ? ({ knight: 0.62, ram: 0.7, catapult: 0.7, pike: 0.72 }[type] || 0.46) : Math.max(w, h) * 0.6 + H * 0.26;
     const cam = this.iconCam;
     cam.left = -ext; cam.right = ext; cam.top = ext; cam.bottom = -ext; cam.updateProjectionMatrix();
-    cam.position.set(6, 6 * 0.95, 6); cam.lookAt(0, H * 0.4, 0);
+    cam.position.set(6, 6 * 0.95, 6); cam.lookAt(0, isU ? ({ pike: 0.45, knight: 0.42 }[type] || 0.3) : H * 0.36, 0);
     this.iconR.setClearColor(0x000000, 0);
     this.iconR.render(scene, cam);
     const url = this.iconR.domElement.toDataURL();

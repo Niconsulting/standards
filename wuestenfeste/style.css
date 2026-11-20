@@ -313,3 +313,86 @@ textarea { width: 100%; font-family: ui-monospace, Menlo, Consolas, monospace; f
   body.drawer #camctl { bottom: calc(156px + env(safe-area-inset-bottom, 0px)); }
   body.showmap #camctl { bottom: calc(184px + env(safe-area-inset-bottom, 0px)); }
 }
+
+/* ---------- Erweiterungen: Info, Truppen, Ziele, Markt ---------- */
+.bitem { position: relative; }
+.ibtn {
+  position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border-radius: 50%; padding: 0;
+  background: rgba(20,14,9,.85); border: 1px solid var(--brass); color: var(--brass-2);
+  font: italic 700 12px/18px Georgia, serif; cursor: pointer; z-index: 2;
+}
+.ibtn:hover { background: var(--brass); color: #2a1a0a; }
+.ibtn.inline { position: static; display: inline-block; vertical-align: middle; margin-left: 4px; }
+.infopanel { width: min(520px, 100%); }
+.ihead { display: flex; gap: 14px; align-items: center; }
+.ihead img { width: 84px; height: 84px; object-fit: contain; background: rgba(0,0,0,.25); border-radius: 10px; border: 1px solid var(--line); flex: none; }
+.ihead h2 { margin: 0 0 4px; }
+.istats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; margin: 14px 0 8px; }
+.istats div { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px solid #44332a; padding: 3px 0; font-size: 13.5px; }
+.istats span { color: var(--parch-dim); }
+#imList { margin: 6px 0 0; padding-left: 18px; }
+#imList li { margin: 4px 0; }
+#troops {
+  position: absolute; left: 12px; bottom: 178px; z-index: 6; display: flex; gap: 6px; flex-wrap: wrap; max-width: calc(100% - 140px);
+}
+#troops button {
+  display: flex; align-items: center; gap: 2px; padding: 2px 8px 2px 2px; border-radius: 22px; cursor: pointer;
+  background: rgba(36,26,18,.92); border: 1px solid var(--line); box-shadow: 0 3px 10px rgba(0,0,0,.4);
+}
+#troops button img { width: 34px; height: 34px; }
+#troops button b { font-variant-numeric: tabular-nums; }
+#troops button.on { border-color: var(--brass-2); background: rgba(90,64,30,.95); }
+#goals {
+  position: absolute; left: 12px; top: 56px; z-index: 4; background: rgba(30,22,16,.9); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 12px; max-width: 300px; font-size: 13px; box-shadow: 0 3px 12px rgba(0,0,0,.4);
+}
+#goals b { font-family: var(--font-display); color: var(--brass-2); font-size: 15px; }
+#goals ul { list-style: none; margin: 4px 0 0; padding: 0; }
+#goals li { display: flex; gap: 6px; align-items: baseline; margin: 2px 0; }
+#goals li span { color: var(--parch-dim); width: 12px; }
+#goals li.ok { color: var(--good); }
+#goals li.ok span { color: var(--good); }
+#goals small { color: var(--parch-dim); margin-left: auto; padding-left: 8px; font-variant-numeric: tabular-nums; }
+body:has(#goals:not([hidden])) #msgs { top: 150px; }
+.recruit { grid-template-columns: repeat(5, 1fr); }
+.rcell { position: relative; }
+.rcell > button[data-act^="recruit"] { width: 100%; background: rgba(0,0,0,.22); border: 1px solid #4f3b2a; border-radius: 5px; padding: 3px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 0; font-size: 11.5px; }
+.rcell > button[data-act^="recruit"]:hover { border-color: var(--brass); }
+.rcell > button.no small { color: var(--bad); }
+.rcell img { width: 38px; height: 38px; }
+.rcell small { font-size: 10px; color: var(--parch-dim); text-align: center; line-height: 1.15; }
+.rcell .cnt { position: absolute; top: 3px; left: 5px; font-size: 11px; color: var(--brass-2); font-weight: 700; }
+.seg { display: flex; gap: 4px; align-items: center; margin: 5px 0; flex-wrap: wrap; }
+.seg label { width: 72px; font-size: 12.5px; color: var(--parch-dim); }
+.seg button { background: var(--wood-3); border: 1px solid var(--line); border-radius: 4px; padding: 5px 9px; cursor: pointer; font-size: 12.5px; }
+.seg button.on { background: var(--brass); color: #2a1a0a; border-color: var(--brass-2); font-weight: 700; }
+.act button.up { border-color: var(--brass); color: var(--brass-2); }
+.act button.up.no { opacity: .55; }
+.lvl { color: var(--brass-2); font-size: 13px; }
+.market { display: grid; gap: 3px; margin: 6px 0; font-size: 12.5px; }
+.market > div { display: grid; grid-template-columns: 1fr 60px 76px 86px; gap: 6px; align-items: center; }
+.market .mh { color: var(--parch-dim); font-size: 11.5px; }
+.market button { background: var(--wood-3); border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; cursor: pointer; font-size: 12px; }
+.market button:hover { border-color: var(--brass); }
+.slot.locked { opacity: .55; }
+.menu-col h2.mt { margin-top: 10px; }
+#missions .slot { grid-template-columns: 1fr 0 auto; }
+@media (pointer: coarse), (max-width: 900px) {
+  #troops { left: max(8px, env(safe-area-inset-left, 0px)); bottom: calc(66px + env(safe-area-inset-bottom, 0px)); max-width: calc(100% - 80px); flex-wrap: nowrap; overflow-x: auto; }
+  body.drawer #troops { bottom: calc(152px + env(safe-area-inset-bottom, 0px)); }
+  body:has(#info:not(.empty)) #troops { display: none; }
+  #troops button img { width: 30px; height: 30px; }
+  #goals { top: calc(52px + env(safe-area-inset-top, 0px)); left: max(8px, env(safe-area-inset-left, 0px)); max-width: 46vw; font-size: 11.5px; padding: 6px 9px; }
+  .ibtn { width: 24px; height: 24px; font-size: 14px; line-height: 22px; }
+  .recruit { grid-template-columns: repeat(5, 1fr); gap: 4px; }
+  .rcell img { width: 30px; height: 30px; }
+  .seg button { padding: 7px 10px; }
+  .istats { grid-template-columns: 1fr; }
+}
+@media (pointer: coarse), (max-width: 900px) {
+  #cbar, body.drawer #cbar { bottom: auto; top: calc(52px + env(safe-area-inset-top, 0px)); }
+  body:has(#cbar:not([hidden])) #msgs, body:has(#cbar:not([hidden])) #goals { display: none; }
+}
+@media (max-width: 600px) {
+  #cbar, body.drawer #cbar { top: calc(96px + env(safe-area-inset-top, 0px)); }
+}

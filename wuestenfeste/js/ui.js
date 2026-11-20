@@ -8,10 +8,14 @@ const ICON = {
   nahrung: '<svg viewBox="0 0 20 20"><circle cx="10" cy="12" r="6" fill="#c7342a"/><circle cx="8" cy="10" r="1.6" fill="#e86a5a"/><path d="M10 6c0-2 1-3 3-3-1 1-2 2-3 3z" fill="#4f7a2e"/></svg>',
   gold: '<svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7" fill="#d6a54a"/><circle cx="10" cy="10" r="5" fill="none" stroke="#9c7426" stroke-width="1.4"/></svg>',
   pop: '<svg viewBox="0 0 20 20"><circle cx="10" cy="6" r="3" fill="#e2b78f"/><path d="M4 18c0-5 3-8 6-8s6 3 6 8z" fill="#b39a6c"/></svg>',
+  brot: '<svg viewBox="0 0 20 20"><ellipse cx="10" cy="11" rx="8" ry="5.5" fill="#c98a45"/><path d="M5 9l2 3M9 8l2 3M13 8l2 3" stroke="#8a5a2a" stroke-width="1.3"/></svg>',
   heart: '<svg viewBox="0 0 20 20"><path d="M10 17S3 12 3 7.5A3.5 3.5 0 0110 6a3.5 3.5 0 017 1.5C17 12 10 17 10 17z" fill="#d9573f"/></svg>',
 };
 
+const LINE_TYPES = ['wall', 'palisade', 'moat', 'pitch'];
+
 const UI = {
+  formation: 'block', uicons: {}, ringR: 0,
   mode: 'select', buildType: null, cat: 'wirtschaft',
   sel: new Set(), selB: 0, inspectU: 0, keepPanel: true,
   wheelMode: 'auto', drag: null, mouse: { x: 0, y: 0, inside: false },
@@ -70,26 +74,91 @@ const UI = {
     a.addEventListener('click', () => this.selectArmy());
     tabs.appendChild(a);
     for (const t in BUILDINGS) if (!BUILDINGS[t].hidden) this.icons[t] = R.icon(t, 112);
+    this.icons.ring = R.icon('bigtower', 112);
+    for (const t of SOLDIER_TYPES) this.uicons[t] = R.icon(t, 80, 'unit');
+    this.$('troops').addEventListener('click', e => {
+      const b = e.target.closest('[data-type]');
+      if (!b) return;
+      const t = b.dataset.type, now = performance.now();
+      const dbl = this.lastTroop && this.lastTroop.t === t && now - this.lastTroop.at < 350;
+      this.lastTroop = { t, at: now };
+      this.selectType(t, dbl);
+    });
+    this.$('imClose').addEventListener('click', () => Main.closeOverlay('infoModal'));
     this.setCat(this.cat);
+  },
+
+  selectType(t, center) {
+    if (this.mode !== 'select') this.setMode('select');
+    this.sel.clear(); this.selB = 0; this.inspectU = 0;
+    let cx = 0, cy = 0, n = 0;
+    for (const u of G.s.units) if (u.owner === 0 && u.type === t && !u.dead) { this.sel.add(u.id); cx += u.x; cy += u.y; n++; }
+    if (center && n) R.centerOn(cx / n, cy / n);
+    this.lastInfo = '';
+  },
+
+  renderTroops() {
+    const cnt = {};
+    for (const u of G.s.units) if (u.owner === 0 && u.type !== 'peasant' && !u.dead) cnt[u.type] = (cnt[u.type] || 0) + 1;
+    const selT = {};
+    for (const id of this.sel) { const u = G.umap.get(id); if (u) selT[u.type] = 1; }
+    const html = SOLDIER_TYPES.filter(t => cnt[t]).map(t => '<button data-type="' + t + '" class="' + (selT[t] ? 'on' : '') + '" title="' + UNITS[t].name + ' – antippen wählt alle, zweimal antippen springt hin"><img alt="" src="' + this.uicons[t] + '"><b>' + cnt[t] + '</b></button>').join('');
+    if (html !== this.lastTroops) { this.$('troops').innerHTML = html; this.lastTroops = html; }
+    const goals = this.$('goals');
+    const gh = typeof Campaign !== 'undefined' ? Campaign.html() : '';
+    goals.hidden = !gh;
+    if (gh !== this.lastGoals) { goals.innerHTML = gh; this.lastGoals = gh; }
   },
 
   setCat(id) {
     this.cat = id;
-    for (const b of this.$('tabs').children) b.classList.toggle('on', b.dataset.cat === id || (b.dataset.cat === 'demolish' && this.mode === 'demolish'));
     const items = this.$('items');
     items.innerHTML = '';
     const cat = BUILD_CATS.find(c => c.id === id);
     for (const t of cat.items) {
-      const D = BUILDINGS[t];
+      const D = t === 'ring' ? RING_ITEM : BUILDINGS[t];
       const el = document.createElement('div');
       el.className = 'bitem'; el.dataset.type = t;
-      el.innerHTML = '<img alt="" src="' + this.icons[t] + '"><span>' + D.name + '</span><small>' + this.costText(D.cost) + '</small>';
-      el.addEventListener('click', () => this.setBuild(this.buildType === t && this.mode === 'build' ? null : t));
+      el.innerHTML = '<button class="ibtn" aria-label="Info zu ' + D.name + '">i</button><img alt="" src="' + this.icons[t] + '"><span>' + D.name + '</span><small>' + (t === 'ring' ? 'nach Bedarf' : this.costText(D.cost)) + '</small>';
+      el.querySelector('.ibtn').addEventListener('click', e => { e.stopPropagation(); this.showInfo(t); });
+      el.addEventListener('click', () => {
+        if (t === 'ring') { this.ringStep(); return; }
+        this.setBuild(this.buildType === t && this.mode === 'build' ? null : t);
+      });
       el.addEventListener('mouseenter', () => { this.hoverItem = t; this.updateHint(); });
       el.addEventListener('mouseleave', () => { this.hoverItem = null; this.updateHint(); });
       items.appendChild(el);
     }
     this.refreshItems();
+  },
+
+  // Info-Fenster zu Gebäude oder Truppe
+  showInfo(key) {
+    const isU = !!UNITS[key] && !BUILDINGS[key];
+    const D = key === 'ring' ? RING_ITEM : isU ? UNITS[key] : BUILDINGS[key];
+    this.$('imTitle').textContent = D.name;
+    this.$('imIcon').src = isU ? this.uicons[key] : this.icons[key] || '';
+    this.$('imDesc').textContent = D.desc || '';
+    const stats = [];
+    if (D.cost && key !== 'ring') stats.push(['Kosten', this.costText(D.cost)]);
+    if (isU) {
+      stats.push(['Leben', D.hp]);
+      if (D.dmg) stats.push(['Schaden', D.dmg + (D.ranged ? ' (Fernkampf)' : '')]);
+      if (D.bdmg) stats.push(['Gegen Gebäude', D.bdmg]);
+      if (D.heal) stats.push(['Heilung', D.heal + ' pro Sekunde']);
+      if (D.range > 1.5) stats.push(['Reichweite', D.range + ' Felder']);
+      stats.push(['Tempo', D.speed >= 2.5 ? 'sehr schnell' : D.speed >= 1.7 ? 'schnell' : D.speed >= 1.1 ? 'mittel' : 'langsam']);
+      if (D.armor && D.armor[0] < 1) stats.push(['Rüstung', Math.round((1 - D.armor[0]) * 100) + ' % weniger Pfeilschaden']);
+    } else if (key !== 'ring') {
+      stats.push(['Größe', D.w + ' × ' + D.h + ' Felder']);
+      stats.push(['Leben', D.hp]);
+      if (D.garrison) stats.push(['Besatzung', D.garrison + ' Soldaten']);
+      if (D.upgrade) stats.push(['Ausbau', 'bis Stufe 3']);
+      if (PROD[key]) stats.push(['Ertrag', PROD[key].amt + ' ' + RES_NAME[PROD[key].res] + (PROD[key].input ? ' aus ' + PROD[key].input.amt + ' ' + RES_NAME[PROD[key].input.res] : '')]);
+    }
+    this.$('imStats').innerHTML = stats.map(([k, v]) => '<div><span>' + k + '</span><b>' + v + '</b></div>').join('');
+    this.$('imList').innerHTML = (D.info || []).map(x => '<li>' + x + '</li>').join('');
+    Main.openOverlay('infoModal');
   },
 
   costText(cost) {
@@ -103,7 +172,7 @@ const UI = {
     for (const el of this.$('items').children) {
       const t = el.dataset.type;
       el.classList.toggle('on', this.mode === 'build' && this.buildType === t);
-      el.classList.toggle('no', !G.canAfford(0, BUILDINGS[t].cost));
+      el.classList.toggle('no', t !== 'ring' && !G.canAfford(0, BUILDINGS[t].cost));
     }
     for (const b of this.$('tabs').children) {
       b.classList.toggle('on', b.dataset.cat === 'demolish' ? this.mode === 'demolish' : b.dataset.cat === 'army' ? false : b.dataset.cat === this.cat && (!this.touch || this.drawer));
@@ -116,9 +185,65 @@ const UI = {
     this.mode = 'build'; this.buildType = t;
     this.sel.clear(); this.selB = 0; this.inspectU = 0;
     this.refreshItems(); this.updateHint();
-    if (!this.touch) this.updateGhost();
-    else G.msg('Tippe auf die Karte, um ' + BUILDINGS[t].name + ' zu platzieren.', 'info', 'tapbuild' + t, 30);
+    if (!this.touch) { this.updateGhost(); return; }
+    if (LINE_TYPES.includes(t)) { G.msg('Ziehe mit dem Finger eine Linie für ' + BUILDINGS[t].name + '. Mit zwei Fingern verschiebst du die Karte.', 'info', 'line' + t, 30); return; }
+    // Vorschau in der Bildmitte, mit dem Finger verschiebbar
+    const [fx, fy] = R.screenToTile(R.W / 2, R.H * 0.5);
+    R.hover = { x: Math.floor(fx), y: Math.floor(fy), fx, fy };
+    this.updateGhost();
+    this.ghostBar();
   },
+
+  ghostBar() {
+    const g = R.ghost, t = this.buildType;
+    if (!g || g.line) return;
+    const D = BUILDINGS[t];
+    if (g.ok) {
+      this.showBar(D.name + ' · ' + this.costText(D.cost) + ' · zum Verschieben ziehen', 'Bauen', () => {
+        const b = G.tryBuild(t, 0, g.x, g.y);
+        if (b) this.afterBuild(b);
+        // nächste Vorschau daneben für Serienbau
+        if (b && this.mode === 'build') { R.hover = { x: g.x + D.w + 1, y: g.y, fx: g.x + D.w + 1 + D.w / 2, fy: g.y + D.h / 2 }; this.updateGhost(); this.ghostBar(); }
+      });
+    } else this.showBar(G.canPlace(t, 0, g.x, g.y) || ('Nicht genug ' + G.missing(0, D.cost).join(' und ')), null, null);
+  },
+
+  // Mauerring um den Burgfried
+  ringStep() {
+    const k = G.bmap.get(G.s.players[0].keep);
+    if (!k) return;
+    const sizes = [7, 9, 11];
+    this.ringR = this.mode === 'build' && this.buildType === 'ring' ? sizes[(sizes.indexOf(this.ringR) + 1) % sizes.length] : 7;
+    this.hideBar(); this.drag = null;
+    this.mode = 'build'; this.buildType = 'ring';
+    this.sel.clear(); this.selB = 0; this.inspectU = 0;
+    const plan = AI.ringTiles({ x: k.x + 1, y: k.y + 1 }, this.ringR);
+    const line = [];
+    const add = (type, x, y) => {
+      const ok = !G.canPlace(type, 0, x, y);
+      line.push({ x, y, ok, type });
+    };
+    for (const [x, y] of plan.gate) add('gate', x, y);
+    for (const [x, y] of plan.tower) add('tower', x, y);
+    for (const [x, y] of plan.wall) add('wall', x, y);
+    R.ghost = { type: 'wall', line };
+    this.ringPlan = line;
+    const n = { wall: 0, gate: 0, tower: 0 };
+    let stone = 0;
+    for (const t of line) if (t.ok) { n[t.type]++; stone += BUILDINGS[t.type].cost.stein; }
+    this.refreshItems();
+    this.showBar('Mauerring ' + (this.ringR * 2 + 1) + '×' + (this.ringR * 2 + 1) + ': ' + n.wall + ' Mauern, ' + n.gate + ' Tore, ' + n.tower + ' Türme · ' + stone + ' Stein. „Mauerring“ nochmal: größer.', 'Bauen', () => {
+      let built = 0, missing = false;
+      for (const kind of ['gate', 'tower', 'wall']) for (const t of this.ringPlan) {
+        if (t.type !== kind || G.canPlace(kind, 0, t.x, t.y)) continue;
+        if (!G.canAfford(0, BUILDINGS[kind].cost)) { missing = true; continue; }
+        if (G.tryBuild(kind, 0, t.x, t.y, true)) built++;
+      }
+      G.msg(built + ' Teile des Mauerrings gebaut.' + (missing ? ' Für den Rest fehlt Stein – tippe später erneut auf „Mauerring“.' : ''), missing ? 'warn' : 'good');
+      this.setMode('select');
+    });
+  },
+
   setMode(m) {
     this.mode = m;
     this.hideBar();
@@ -132,23 +257,25 @@ const UI = {
     const h = this.$('hint');
     const t = this.hoverItem || (this.mode === 'build' ? this.buildType : null);
     if (t) {
-      const D = BUILDINGS[t];
-      h.innerHTML = '<b>' + D.name + '</b> · ' + this.costText(D.cost) + ' · ' + D.desc + (this.mode === 'build' && !this.hoverItem ? this.T(' · Rechtsklick: abbrechen', ' · Nochmal antippen: abbrechen') : '');
+      const D = t === 'ring' ? RING_ITEM : BUILDINGS[t];
+      h.innerHTML = '<b>' + D.name + '</b> · ' + (t === 'ring' ? '' : this.costText(D.cost) + ' · ') + D.desc + (this.mode === 'build' && !this.hoverItem ? this.T(' · Rechtsklick: abbrechen', '') : '');
     } else if (this.mode === 'demolish') {
       h.innerHTML = '<b>Abreißen:</b> ' + this.T('Klicke', 'Tippe') + ' auf ein eigenes Gebäude. Du bekommst die Hälfte von Holz und Stein zurück.';
-    } else h.textContent = this.T('Wähle ein Gebäude aus. Linksklick setzt es, Rechtsklick bricht ab.', 'Wähle ein Gebäude, dann tippe auf die Karte.');
+    } else h.textContent = this.T('Wähle ein Gebäude aus. Linksklick setzt es, Rechtsklick bricht ab. Das „i“ erklärt jedes Gebäude.', 'Wähle ein Gebäude. Das „i“ erklärt es.');
   },
 
   updateGhost() {
-    if (this.mode !== 'build' || !R.hover) { R.ghost = null; return; }
+    if (this.mode !== 'build' || this.buildType === 'ring') return;
+    if (!R.hover) { R.ghost = null; return; }
     const t = this.buildType, D = BUILDINGS[t];
     if (this.drag && this.drag.wall) {
       const line = this.wallLine(this.drag.x0, this.drag.y0, R.hover.x, R.hover.y);
-      let stone = G.s.players[0].res.stein;
+      const res = Object.assign({}, G.s.players[0].res);
       R.ghost = {
         type: t, line: line.map(([x, y]) => {
-          const ok = !G.canPlace(t, 0, x, y) && stone >= D.cost.stein;
-          if (ok) stone -= D.cost.stein;
+          let ok = !G.canPlace(t, 0, x, y);
+          for (const k in D.cost) if ((res[k] || 0) < D.cost[k]) ok = false;
+          if (ok) for (const k in D.cost) res[k] -= D.cost[k];
           return { x, y, ok };
         }),
       };
@@ -216,8 +343,22 @@ const UI = {
     if (this.ptrs.size === 1) {
       this.tg = { id: e.pointerId, sx: e.clientX, sy: e.clientY, moved: false, long: false, cancel: false };
       clearTimeout(this.longT);
-      this.longT = setTimeout(() => this.onLong(), 450);
+      if (this.mode === 'build' && this.buildType !== 'ring') {
+        const [fx, fy] = R.screenToTile(e.clientX, e.clientY);
+        const g = R.ghost;
+        if (LINE_TYPES.includes(this.buildType)) {
+          this.tg.line = true;
+          this.drag = { wall: true, x0: Math.floor(fx), y0: Math.floor(fy) };
+          R.hover = { x: Math.floor(fx), y: Math.floor(fy), fx, fy };
+          this.hideBar();
+          this.updateGhost();
+        } else if (g && !g.line) {
+          const D = BUILDINGS[this.buildType];
+          if (fx >= g.x - 0.6 && fx <= g.x + D.w + 0.6 && fy >= g.y - 0.6 && fy <= g.y + D.h + 0.6) { this.tg.ghost = true; this.tg.gdx = fx - (g.x + D.w / 2); this.tg.gdy = fy - (g.y + D.h / 2); }
+        }
+      } else this.longT = setTimeout(() => this.onLong(), 450);
     } else {
+      if (this.tg && this.tg.line) { this.drag = null; R.ghost = null; }
       clearTimeout(this.longT);
       if (this.tg) this.tg.cancel = true;
       R.selRect = null;
@@ -251,6 +392,14 @@ const UI = {
     if (!tg || tg.cancel || tg.id !== e.pointerId) return;
     if (!tg.moved && Math.hypot(p.x - tg.sx, p.y - tg.sy) > 10) { tg.moved = true; clearTimeout(this.longT); }
     if (tg.long) { if (tg.moved) R.selRect = { x0: tg.sx, y0: tg.sy, x1: p.x, y1: p.y }; return; }
+    if (tg.line || tg.ghost) {
+      let [fx, fy] = R.screenToTile(p.x, p.y);
+      if (tg.ghost) { fx -= tg.gdx; fy -= tg.gdy; }
+      R.hover = { x: Math.floor(fx), y: Math.floor(fy), fx, fy };
+      this.updateGhost();
+      if (tg.ghost) this.ghostBar();
+      return;
+    }
     if (tg.moved) R.panBy(p.x - px, p.y - py);
   },
 
@@ -276,6 +425,15 @@ const UI = {
       else this.clickSelect(p.x, p.y, false);
       return;
     }
+    if (tg.line) {
+      const n = R.ghost && R.ghost.line ? R.ghost.line.filter(q => q.ok).length : 0;
+      const D = BUILDINGS[this.buildType];
+      const cost = {};
+      for (const k in D.cost) cost[k] = D.cost[k] * n;
+      this.showBar(n ? D.name + ': ' + n + ' Felder · ' + this.costText(cost) : 'Hier geht das nicht.', n ? 'Bauen' : null, () => { this.buildWallLine(); this.drag = null; R.ghost = null; });
+      return;
+    }
+    if (tg.ghost) return;
     if (!tg.moved) this.onTap(p.x, p.y);
   },
 
@@ -318,39 +476,12 @@ const UI = {
 
   // Bauen per Fingertipp: erst Vorschau, dann bestätigen
   touchPlace(x, y) {
+    if (this.buildType === 'ring' || LINE_TYPES.includes(this.buildType)) return;
     const [fx, fy] = R.screenToTile(x, y);
-    const tx = Math.floor(fx), ty = Math.floor(fy);
-    if (!World.inb(tx, ty)) return;
-    const t = this.buildType;
-    if (t === 'wall') {
-      if (!this.drag || !this.drag.wall) {
-        this.drag = { wall: true, x0: tx, y0: ty };
-        R.hover = { x: tx, y: ty, fx, fy };
-        this.updateGhost();
-        this.showBar('Mauer: Tippe jetzt auf den Endpunkt.', null, null);
-        return;
-      }
-      R.hover = { x: tx, y: ty, fx, fy };
-      this.updateGhost();
-      const n = R.ghost && R.ghost.line ? R.ghost.line.filter(q => q.ok).length : 0;
-      this.showBar(n ? 'Mauer mit ' + n + ' Feldern bauen? · ' + n + ' Stein' : 'Hier geht keine Mauer.', n ? 'Bauen' : null, () => { this.buildWallLine(); this.drag = null; R.ghost = null; });
-      return;
-    }
-    const prev = R.ghost;
-    R.hover = { x: tx, y: ty, fx, fy };
+    if (!World.inb(Math.floor(fx), Math.floor(fy))) return;
+    R.hover = { x: Math.floor(fx), y: Math.floor(fy), fx, fy };
     this.updateGhost();
-    const g = R.ghost;
-    if (!g) return;
-    const D = BUILDINGS[t];
-    // zweites Tippen auf dieselbe Stelle baut sofort
-    if (prev && !prev.line && prev.x === g.x && prev.y === g.y && g.ok && this.cbarOpen) { this.cbarAct(true); return; }
-    if (g.ok) {
-      this.showBar(D.name + ' hier bauen? · ' + this.costText(D.cost), 'Bauen', () => {
-        const b = G.tryBuild(t, 0, g.x, g.y);
-        if (b) this.afterBuild(b);
-        R.ghost = null;
-      });
-    } else this.showBar(G.canPlace(t, 0, g.x, g.y) || ('Nicht genug ' + G.missing(0, D.cost).join(' und ')), null, null);
+    this.ghostBar();
   },
 
   showBar(text, okLabel, cb) {
@@ -373,13 +504,15 @@ const UI = {
 
   buildWallLine() {
     const line = R.ghost && R.ghost.line ? R.ghost.line : [];
+    const t = this.buildType, D = BUILDINGS[t];
+    if (!D) return;
     let failed = false;
-    for (const t of line) {
-      if (G.canPlace('wall', 0, t.x, t.y)) continue;
-      if (!G.canAfford(0, BUILDINGS.wall.cost)) { failed = true; break; }
-      G.tryBuild('wall', 0, t.x, t.y, true);
+    for (const q of line) {
+      if (G.canPlace(t, 0, q.x, q.y)) continue;
+      if (!G.canAfford(0, D.cost)) { failed = true; break; }
+      G.tryBuild(t, 0, q.x, q.y, true);
     }
-    if (failed) G.msg('Nicht genug Stein für die ganze Mauer.', 'warn', 'afford', 1.5);
+    if (failed) G.msg('Nicht genug ' + G.missing(0, D.cost).join(' und ') + ' für die ganze Linie.', 'warn', 'afford', 1.5);
   },
 
   onDown(e) {
@@ -389,7 +522,8 @@ const UI = {
     if (e.button !== 0) return;
     if (this.mode === 'build') {
       if (!R.hover) return;
-      if (this.buildType === 'wall') { this.drag = { wall: true, x0: R.hover.x, y0: R.hover.y }; this.updateGhost(); return; }
+      if (this.buildType === 'ring') return;
+      if (LINE_TYPES.includes(this.buildType)) { this.drag = { wall: true, x0: R.hover.x, y0: R.hover.y }; this.updateGhost(); return; }
       const g = R.ghost;
       if (g && !g.line) {
         const b = G.tryBuild(this.buildType, 0, g.x, g.y);
@@ -529,7 +663,7 @@ const UI = {
     }
     const [fx, fy] = R.screenToTile(mx, my);
     const x = U.clamp(Math.floor(fx), 0, World.n - 1), y = U.clamp(Math.floor(fy), 0, World.n - 1);
-    G.cmdMove(units, x, y);
+    G.cmdMove(units, x, y, this.formation);
     G.fx.push({ k: 'mark', x: x + 0.5, y: y + 0.5, t: 0, dur: 0.6, c: '#9fe07a' });
   },
 
@@ -612,6 +746,7 @@ const UI = {
     this.refreshT -= dt;
     if (this.refreshT <= 0) {
       this.refreshT = 0.2;
+      this.renderTroops();
       this.renderTop();
       this.renderInfo();
       this.refreshItems();
@@ -629,7 +764,8 @@ const UI = {
       this.chip('holz', U.fmt(r.holz), 'Holz') +
       this.chip('stein', U.fmt(r.stein), 'Stein') +
       this.chip('eisen', U.fmt(r.eisen), 'Eisen') +
-      this.chip('nahrung', U.fmt(r.nahrung), 'Nahrung im Kornspeicher') +
+      this.chip('nahrung', U.fmt(r.nahrung), 'Äpfel im Kornspeicher') +
+      this.chip('brot', U.fmt(r.brot || 0), 'Brot im Kornspeicher · Weizen ' + U.fmt(r.weizen || 0) + ' · Mehl ' + U.fmt(r.mehl || 0)) +
       this.chip('gold', U.fmt(r.gold), 'Gold') +
       this.chip('pop', pc.all + '<small>/' + housing + '</small>', 'Bauern / Wohnraum · ' + pc.idle + ' frei am Lagerfeuer', ' <small>(' + pc.idle + ' frei)</small>') +
       '<div class="chip ' + (p.popularity >= 50 ? 'pop-good' : 'pop-bad') + '" title="Beliebtheit: über 50 kommen Bauern, unter 50 gehen sie">' + ICON.heart + '<b>' + Math.round(p.popularity) + '</b>' + trend + '</div>';
@@ -637,7 +773,8 @@ const UI = {
     this.$('date').textContent = G.dateText();
     const left = G.s.ai.nextAttack - G.s.time;
     const pe = this.$('peace');
-    if (G.s.ai.waves === 0 && left > 0) {
+    if (G.s.ai.passive) pe.textContent = '';
+    else if (G.s.ai.waves === 0 && left > 0) {
       const m = Math.floor(left / 60), s = Math.floor(left % 60);
       pe.innerHTML = 'Friedenszeit: <b>' + m + ':' + String(s).padStart(2, '0') + '</b>';
     } else if (left > 0 && left < 60) pe.innerHTML = 'Nächster Angriff: <b>bald</b>';
@@ -671,7 +808,7 @@ const UI = {
     const cls = v => v > 0 ? 'p' : v < 0 ? 'n' : '';
     const pc = G.peasants(0);
     const eat = pc.all * RATIONS[p.ration].eat * FOOD_PER_PEASANT;
-    const turns = eat > 0 ? Math.floor(p.res.nahrung / eat) : '∞';
+    const turns = eat > 0 ? Math.floor(FOODS.reduce((a, k) => a + (p.res[k] || 0), 0) / eat) : '∞';
     const gold = pc.all * TAXES[p.tax].gold;
     return '<h3>Burgfried <small>' + (summary ? 'Verwaltung · Taste B' : 'dein Herrschersitz') + '</small></h3>' +
       '<div class="ctrl"><label>Rationen</label><button class="sbtn" data-act="ration-" title="weniger">−</button><output>' + RATIONS[p.ration].name + ' · reicht ' + turns + ' Runden</output><button class="sbtn" data-act="ration+" title="mehr">+</button></div>' +
@@ -679,6 +816,7 @@ const UI = {
       '<div class="factors"><span>Beliebtheit pro Runde:</span>' +
       '<span class="' + cls(f.nahrung) + '">Nahrung ' + sgn(f.nahrung) + '</span>' +
       '<span class="' + cls(f.steuern) + '">Steuern ' + sgn(f.steuern) + '</span>' +
+      (f.vielfalt ? '<span class="p">Vielfalt +' + f.vielfalt + '</span>' : '') +
       (f.kapelle ? '<span class="p">Kapelle +' + f.kapelle + '</span>' : '') +
       '<span class="' + cls(f.gesamt) + '"><b>Gesamt ' + sgn(f.gesamt) + '</b></span></div>' +
       '<p class="note">Eine Runde dauert ' + ECON_TICK + ' Sekunden. Rationen und Steuern wirken ab der nächsten Runde.</p>';
@@ -686,24 +824,44 @@ const UI = {
 
   infoBuilding(b) {
     const D = BUILDINGS[b.type];
-    if (b.type === 'keep' && b.owner === 0) return this.infoKeep(false) + this.hp(b);
-    let h = '<h3>' + D.name + ' <small>' + (b.owner === 0 ? 'dein Gebäude' : 'feindlich') + ' · ' + Math.max(0, Math.round(b.hp)) + ' / ' + b.maxHp + '</small></h3>' + this.hp(b);
+    const lv = b.level || 1;
+    if (b.type === 'keep' && b.owner === 0) return this.infoKeep(false) + this.hp(b) + this.upgradeRow(b);
+    let h = '<h3>' + D.name + (lv > 1 ? ' <span class="lvl">' + '★'.repeat(lv - 1) + '</span>' : '') + ' <small>' + (b.owner === 0 ? 'Stufe ' + lv : 'feindlich') + ' · ' + Math.max(0, Math.round(b.hp)) + ' / ' + b.maxHp + '</small> <button class="ibtn inline" data-act="info:' + b.type + '" aria-label="Info">i</button></h3>' + this.hp(b);
     if (b.owner !== 0) return h + '<p>' + this.T('Wähle Soldaten und rechtsklicke das Gebäude, um es anzugreifen.', 'Wähle Soldaten und tippe auf das Gebäude, um es anzugreifen.') + '</p>';
     h += '<p>' + D.desc + '</p>';
     if (D.worker) {
       const w = G.umap.get(b.worker);
       let st = 'Kein Arbeiter – es gibt keinen freien Bauern.';
-      if (w) st = w.task === 'toWork' ? 'Arbeiter ist auf dem Weg.' : w.task === 'wait' ? 'Arbeiter findet keinen Weg!' : w.phase === 'noTree' ? 'Keine Bäume in Reichweite.' : w.phase === 'noStore' ? 'Kein ' + BUILDINGS[PROD[b.type].store].name + ' erreichbar!' : w.carry ? 'Bringt ' + w.carry.amt + ' ' + RES_NAME[w.carry.res] + ' ins Lager.' : 'Arbeiter ist bei der Arbeit.';
+      if (w) st = w.task === 'toWork' ? 'Arbeiter ist auf dem Weg.' : w.task === 'wait' ? 'Arbeiter findet keinen Weg!' : b.type === 'ballista' ? 'Die Balliste ist besetzt und schussbereit.' : w.phase === 'noTree' ? 'Keine Bäume in Reichweite.' : w.phase === 'waitInput' ? 'Wartet auf ' + RES_NAME[PROD[b.type].input.res] + ' im Lager.' : w.phase === 'noStore' ? 'Kein ' + BUILDINGS[PROD[b.type].store].name + ' erreichbar!' : w.carry ? 'Trägt ' + w.carry.amt + ' ' + RES_NAME[w.carry.res] + '.' : 'Arbeiter ist bei der Arbeit.';
       h += '<p>' + st + '</p>';
     }
-    if (D.housing) h += '<p>Wohnraum: ' + D.housing + ' Bauern.</p>';
+    if (D.housing) h += '<p>Wohnraum: ' + (D.housing + 4 * (lv - 1)) + ' Bauern.</p>';
     if (b.type === 'barracks') h += this.recruitBox();
-    if (b.type === 'tower') {
-      h += '<p>Besatzung: ' + b.garrison.length + ' / 4. ' + this.T('Wähle Soldaten und rechtsklicke den Turm.', 'Wähle Soldaten und tippe auf den Turm.') + '</p>';
+    if (b.type === 'market') h += this.marketBox();
+    if (D.garrison) {
+      h += '<p>Besatzung: ' + b.garrison.length + ' / ' + D.garrison + '. ' + this.T('Wähle Schützen und rechtsklicke den Turm.', 'Wähle Schützen und tippe auf den Turm.') + '</p>';
       if (b.garrison.length) h += '<div class="act"><button data-act="ungarrison">Besatzung auswählen</button></div>';
     }
+    h += this.upgradeRow(b);
     if (b.type !== 'keep') h += '<div class="act"><button class="danger" data-act="demolish">Abreißen</button></div>';
     return h;
+  },
+
+  upgradeRow(b) {
+    const D = BUILDINGS[b.type];
+    if (!D.upgrade || b.owner !== 0) return '';
+    if ((b.level || 1) >= 3) return '<p class="small">Höchste Stufe erreicht.</p>';
+    const c = upgradeCost(b);
+    return '<div class="act"><button class="up' + (G.canAfford(0, c) ? '' : ' no') + '" data-act="upgrade">Ausbauen auf Stufe ' + ((b.level || 1) + 1) + ' · ' + this.costText(c) + '</button></div>';
+  },
+
+  marketBox() {
+    const r = G.s.players[0].res;
+    let h = '<div class="market"><div class="mh"><span>Ware</span><span>Bestand</span><span>Kaufen 5</span><span>Verkaufen 5</span></div>';
+    for (const k in MARKET) {
+      h += '<div><span>' + RES_NAME[k] + '</span><span>' + U.fmt(r[k] || 0) + '</span><button data-act="buy:' + k + '">' + MARKET[k] + ' Gold</button><button data-act="sell:' + k + '">+' + Math.floor(MARKET[k] / 2) + ' Gold</button></div>';
+    }
+    return h + '</div>';
   },
 
   recruitBox() {
@@ -714,7 +872,7 @@ const UI = {
     for (const t of SOLDIER_TYPES) {
       const D = UNITS[t];
       const ok = G.canAfford(0, D.cost) && pc.idle > 0;
-      h += '<button data-act="recruit:' + t + '" class="' + (ok ? '' : 'no') + '" title="' + D.desc + '"><b>' + D.name + '</b><small>' + this.costText(D.cost) + '</small><small>' + (cnt[t] || 0) + ' im Dienst</small></button>';
+      h += '<div class="rcell"><button data-act="recruit:' + t + '" class="' + (ok ? '' : 'no') + '" title="' + D.desc + '"><img alt="" src="' + this.uicons[t] + '"><b>' + D.name + '</b><small>' + this.costText(D.cost) + '</small></button><span class="cnt">' + (cnt[t] || 0) + '</span><button class="ibtn" data-act="info:' + t + '" aria-label="Info zu ' + D.name + '">i</button></div>';
     }
     h += '</div><p>' + pc.idle + ' freie Bauern am Lagerfeuer.' + this.T(' Umschalt + Klick bildet 5 aus.', '') + '</p>';
     return h;
@@ -723,10 +881,13 @@ const UI = {
   infoUnits(units) {
     const cnt = {};
     for (const u of units) cnt[u.type] = (cnt[u.type] || 0) + 1;
-    let h = '<h3>' + (units.length === 1 ? UNITS[units[0].type].name : units.length + ' Soldaten') + '</h3>';
-    if (units.length === 1) h += this.hp(units[0]) + '<p>' + UNITS[units[0].type].desc + '</p>';
+    let h = '<h3>' + (units.length === 1 ? UNITS[units[0].type].name : units.length + ' Soldaten') + (units.length === 1 ? ' <button class="ibtn inline" data-act="info:' + units[0].type + '" aria-label="Info">i</button>' : '') + '</h3>';
+    if (units.length === 1) h += this.hp(units[0]);
     else h += '<div class="unitlist">' + SOLDIER_TYPES.filter(t => cnt[t]).map(t => '<span>' + cnt[t] + '× ' + UNITS[t].name + '</span>').join('') + '</div>';
-    h += '<p>' + this.T('Rechtsklick: bewegen · auf Feind: angreifen · auf eigenen Wachturm: besetzen. Doppelklick wählt alle gleichen Soldaten.', 'Tippe auf die Karte: bewegen · auf Feind: angreifen · auf eigenen Turm: besetzen. Halten und ziehen: einrahmen.') + '</p>';
+    const st = units.every(u => (u.stance || 'defensive') === (units[0].stance || 'defensive')) ? (units[0].stance || 'defensive') : '';
+    h += '<div class="seg"><label>Haltung</label>' + Object.keys(STANCES).map(k => '<button data-act="stance:' + k + '" class="' + (st === k ? 'on' : '') + '">' + STANCES[k].name + '</button>').join('') + '</div>';
+    h += '<div class="seg"><label>Formation</label>' + Object.keys(FORMATIONS).map(k => '<button data-act="form:' + k + '" class="' + (this.formation === k ? 'on' : '') + '">' + FORMATIONS[k] + '</button>').join('') + '</div>';
+    h += '<p class="note">' + this.T('Rechtsklick: bewegen · auf Feind: angreifen · auf eigenen Turm: besetzen.', 'Tippe auf die Karte: bewegen · auf Feind: angreifen · auf eigenen Turm: besetzen.') + '</p>';
     h += '<div class="act">' + (units.some(u => u.tower) ? '<button data-act="leave">Turm verlassen</button>' : '') + '<button data-act="deselect">Auswahl aufheben</button></div>';
     return h;
   },
@@ -756,6 +917,18 @@ const UI = {
     } else if (a === 'ungarrison') {
       const b = G.bmap.get(this.selB);
       if (b) { this.sel = new Set(b.garrison); this.selB = 0; }
+    } else if (a === 'upgrade') {
+      const b = G.bmap.get(this.selB);
+      if (b) G.upgrade(b);
+    } else if (a.startsWith('buy:') || a.startsWith('sell:')) {
+      const [m, k] = a.split(':');
+      G.trade(0, k, m === 'buy');
+    } else if (a.startsWith('stance:')) {
+      G.setStance([...this.sel].map(id => G.umap.get(id)).filter(Boolean), a.slice(7));
+    } else if (a.startsWith('form:')) {
+      this.formation = a.slice(5);
+    } else if (a.startsWith('info:')) {
+      this.showInfo(a.slice(5));
     } else if (a === 'deselect' || a === 'close') {
       this.sel.clear(); this.selB = 0; this.inspectU = 0; this.keepOpen = false;
     } else if (a === 'leave') {

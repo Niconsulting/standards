@@ -16,15 +16,16 @@ const Save = {
     const n = World.n;
     let tiles = '', trees = '';
     for (let i = 0; i < n * n; i++) { tiles += World.tiles[i]; trees += World.trees[i]; }
-    const UF = ['id', 'type', 'owner', 'x', 'y', 'hp', 'face', 'task', 'job', 'phase', 'timer', 'carry', 'order', 'tower', 'attacker', 'dest', 'after', 'treeI', 'storeId'];
+    const UF = ['id', 'type', 'owner', 'x', 'y', 'hp', 'face', 'task', 'job', 'phase', 'timer', 'carry', 'order', 'tower', 'attacker', 'dest', 'after', 'treeI', 'storeId', 'stance'];
     return {
       game: 'wuestenfeste', v: SAVE_VERSION, savedAt: Date.now(),
       s: {
         seed: s.seed, time: s.time, difficulty: s.difficulty, peace: s.peace, nextId: s.nextId, over: s.over,
         players: JSON.parse(JSON.stringify(s.players)), ai: JSON.parse(JSON.stringify(s.ai)),
+        mission: s.mission ? JSON.parse(JSON.stringify(s.mission)) : null, stats: s.stats || { kills: 0, lost: 0 },
       },
       n, tiles, trees,
-      b: s.buildings.map(b => [b.id, b.type, b.owner, b.x, b.y, Math.round(b.hp), b.worker, b.garrison.slice(), b.recruits || 0]),
+      b: s.buildings.map(b => [b.id, b.type, b.owner, b.x, b.y, Math.round(b.hp), b.worker, b.garrison.slice(), b.recruits || 0, b.level || 1, Math.round(b.maxHp)]),
       u: s.units.filter(u => !u.dead).map(u => {
         const o = {};
         for (const k of UF) if (u[k] !== undefined && u[k] !== null && u[k] !== '') o[k] = u[k];
@@ -37,7 +38,7 @@ const Save = {
 
   apply(d) {
     if (!d || d.game !== 'wuestenfeste' || !d.s || !d.tiles) throw new Error('Das ist kein Spielstand von Wüstenfeste.');
-    if (d.v > SAVE_VERSION) throw new Error('Dieser Spielstand stammt aus einer neueren Version.');
+    if (d.v > 2) throw new Error('Dieser Spielstand stammt aus einer neueren Version.');
     const n = d.n || MAP_N;
     World.n = n;
     World.seed = d.s.seed;
@@ -50,12 +51,13 @@ const Save = {
     G.proj = []; G.fx = []; G.msgCool = {};
     G.s = Object.assign({ version: SAVE_VERSION, buildings: [], units: [] }, d.s);
     G.s.buildings = []; G.s.units = [];
-    for (const p of G.s.players) { p.econT = p.econT || ECON_TICK; p.migT = p.migT || 3; p.jobT = 0; }
+    for (const p of G.s.players) { for (const k of RES) if (p.res[k] == null) p.res[k] = 0; p.econT = p.econT || ECON_TICK; p.migT = p.migT || 3; p.jobT = 0; }
     const trees = World.trees.slice();
-    for (const [id, type, owner, x, y, hp, worker, garrison, recruits] of d.b) {
+    for (const [id, type, owner, x, y, hp, worker, garrison, recruits, level, maxHp] of d.b) {
       if (!BUILDINGS[type]) continue;
       const b = G.addBuilding(type, owner, x, y, id);
       b.hp = hp; b.worker = worker || 0; b.garrison = garrison || []; b.recruits = recruits || 0;
+      b.level = level || 1; if (maxHp) b.maxHp = maxHp;
     }
     World.trees = trees; // addBuilding entfernt Bäume nur bei echtem Neubau
     for (const b of G.s.buildings) for (let yy = b.y; yy < b.y + b.h; yy++) for (let xx = b.x; xx < b.x + b.w; xx++) World.trees[World.idx(xx, yy)] = 0;

@@ -10,7 +10,7 @@ const AI = {
     ['orchard', 1, 'grass'], ['house', 4], ['quarry', 2, 'rock'], ['ring', 'wall'], ['house', 6],
     ['mine', 2, 'iron'], ['stockpile', 2],
   ],
-  MIX: { archer: 0.35, spear: 0.3, sword: 0.2, knight: 0.15 },
+  MIX: { archer: 0.24, crossbow: 0.1, spear: 0.16, pike: 0.1, sword: 0.16, knight: 0.1, assassin: 0.04, monk: 0.04, ram: 0.04, catapult: 0.02 },
 
   init() {
     G.s.ai = { thinkT: 3, waves: 0, nextAttack: G.s.peace, buildT: 2, recruitT: 20 };
@@ -27,8 +27,8 @@ const AI = {
     return d >= this.R - 1 && d <= this.R + 1;
   },
 
-  ringTiles(c) {
-    const R = this.R, out = { gate: [], tower: [], wall: [] };
+  ringTiles(c, Rr) {
+    const R = Rr || this.R, out = { gate: [], tower: [], wall: [] };
     const towerSet = new Set();
     for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
       const tx = sx > 0 ? c.x + R - 1 : c.x - R, ty = sy > 0 ? c.y + R - 1 : c.y - R;
@@ -167,10 +167,11 @@ const AI = {
     const bar = s.buildings.find(b => b.owner === this.OWNER && b.type === 'barracks');
     a.recruitT = (a.recruitT || 0) - 1;
     if (bar && sol.length < D.armyCap && a.recruitT <= 0) {
-      const cnt = { archer: 0, spear: 0, sword: 0, knight: 0 };
+      const cnt = {};
+      for (const t of SOLDIER_TYPES) cnt[t] = 0;
       for (const u of sol) cnt[u.type]++;
       const total = sol.length + 1;
-      const order = SOLDIER_TYPES.slice().sort((x, y) => (cnt[x] / total - this.MIX[x]) - (cnt[y] / total - this.MIX[y]));
+      const order = SOLDIER_TYPES.filter(t => this.MIX[t] && !(s.difficulty === 'leicht' && UNITS[t].siege)).sort((x, y) => (cnt[x] / total - this.MIX[x]) - (cnt[y] / total - this.MIX[y]));
       const planDone = G.count(this.OWNER, 'house') >= 4;
       for (const t of order) {
         const cost = UNITS[t].cost;
@@ -193,7 +194,7 @@ const AI = {
     for (const t of towers) {
       const pending = sol.filter(u => u.order.t === 'garrison' && u.order.id === t.id).length;
       if (t.garrison.length + pending >= 4) continue;
-      const free = sol.find(u => u.type === 'archer' && !u.tower && !u.attacker && u.order.t === 'idle' && !u.engage);
+      const free = sol.find(u => (u.type === 'archer' || u.type === 'crossbow') && !u.tower && !u.attacker && u.order.t === 'idle' && !u.engage);
       if (free) G.cmdGarrison([free], t);
     }
     // Verteidigung: Eindringlinge nahe der Burg
@@ -221,6 +222,11 @@ const AI = {
   },
 
   pickTarget(u) {
+    if (u.type === 'ram') {
+      let best = null, bd = 1e9;
+      for (const b of G.s.buildings) { if (b.owner !== 0 || !(b.type === 'gate' || b.type === 'wall')) continue; const d = U.dist(u.x, u.y, b.x, b.y) - (b.type === 'gate' ? 5 : 0); if (d < bd) { bd = d; best = b; } }
+      if (best) return best;
+    }
     const keep = G.bmap.get(G.s.players[0].keep);
     if (keep && U.dist(u.x, u.y, keep.x + 1.5, keep.y + 1.5) < 30) return keep;
     let best = keep, bd = 1e9;
@@ -234,7 +240,7 @@ const AI = {
 
   attack(c) {
     const s = G.s, a = s.ai;
-    if (s.time < a.nextAttack) return;
+    if (a.passive || s.time < a.nextAttack) return;
     const D = DIFFICULTY[s.difficulty];
     const field = this.soldiers().filter(u => !u.tower && !u.attacker);
     const want = Math.min(D.armyCap - 4, D.wave + a.waves * D.waveStep);
@@ -247,7 +253,7 @@ const AI = {
     for (const u of go) u.attacker = true;
     G.cmdSiege(go, keep);
     a.waves++;
-    a.nextAttack = s.time + D.interval;
+    a.nextAttack = s.time + (a.waveInterval || D.interval);
     G.msg('Der Wüstenfürst greift an! ' + go.length + ' Soldaten rücken aus.', 'bad');
   },
 };

@@ -102,8 +102,9 @@ const World = {
     if (bid) {
       const b = G.bmap.get(bid);
       if (!b) return 1;
+      if (BUILDINGS[b.type].walk) return 1;
       if (b.owner === o.owner) return b.type === 'gate' ? 1 : -1;
-      if (o.breach) return b.type === 'wall' ? 9 : b.type === 'gate' ? 14 : 22;
+      if (o.breach) return b.type === 'wall' || b.type === 'palisade' || b.type === 'moat' ? 9 : b.type === 'gate' ? 14 : 22;
       return -1;
     }
     return this.trees[i] ? 1.3 : 1;

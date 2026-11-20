@@ -11,6 +11,8 @@ html = (root / 'index.html').read_text(encoding='utf-8')
 css = (root / 'style.css').read_text(encoding='utf-8')
 scripts = re.findall(r'<script src="(js/[^"]+)"></script>', html)
 js = '\n'.join((root / s).read_text(encoding='utf-8') for s in scripts)
+three = (root / 'lib/three.min.js').read_text(encoding='utf-8')
+THREE_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
 body = html.split('<!--BODY-START-->')[1].split('<!--BODY-END-->')[0]
 fonts = re.search(r'<link rel="stylesheet" href="(https://fonts[^"]+)">', html).group(1)
 js = js.replace('</script', '<\\/script')
@@ -18,11 +20,12 @@ js = js.replace('</script', '<\\/script')
 if len(sys.argv) > 2 and sys.argv[1] == '--fragment':
     out = ('<title>Wüstenfeste</title>\n'
            '<link rel="stylesheet" href="' + fonts + '">\n'
-           '<style>\n' + css + '\n</style>\n' + body + '\n<script>\n' + js + '\n</script>\n')
+           '<style>\n' + css + '\n</style>\n' + body + '\n<script src="' + THREE_CDN + '"></script>\n<script>\n' + js + '\n</script>\n')
     pathlib.Path(sys.argv[2]).write_text(out, encoding='utf-8')
 else:
     out = html.split('<!--BODY-START-->')[0]
     out = out.replace('<link rel="stylesheet" href="style.css">', '<style>\n' + css + '\n</style>')
-    out += body + '\n<script>\n' + js + '\n</script>\n</body>\n</html>\n'
+    out = out.replace('<script src="lib/three.min.js"></script>', '')
+    out += body + '\n<script>\n' + three.replace('</script', '<\\/script') + '\n</script>\n<script>\n' + js + '\n</script>\n</body>\n</html>\n'
     (root / 'Wuestenfeste.html').write_text(out, encoding='utf-8')
 print('ok', len(out) // 1024, 'KB')

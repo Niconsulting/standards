@@ -38,6 +38,8 @@
   </header>
 
   <div id="msgs" aria-live="polite"></div>
+  <div id="goals" hidden></div>
+  <div id="troops" hidden></div>
   <div id="pausedTag" hidden>Pausiert</div>
   <div id="cbar" hidden>
     <span id="cbarText"></span>
@@ -80,7 +82,9 @@
               <option value="20">20 Minuten</option>
             </select>
           </label>
-          <button class="primary" id="btnNew">Spiel starten</button>
+          <button class="primary" id="btnNew">Freies Spiel starten</button>
+          <h2 class="mt">Kampagne</h2>
+          <div id="missions" class="slots"></div>
         </div>
         <div class="menu-col">
           <h2>Spielstände</h2>
@@ -128,6 +132,16 @@
         <button id="xferClose">Schließen</button>
         <button class="primary" id="xferLoad">Laden</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Info zu Gebäude / Truppe -->
+  <div class="overlay" id="infoModal" hidden>
+    <div class="panel infopanel">
+      <div class="ihead"><img id="imIcon" alt=""><div><h2 id="imTitle"></h2><p id="imDesc" class="small"></p></div></div>
+      <div id="imStats" class="istats"></div>
+      <ul id="imList"></ul>
+      <div class="row end"><button class="primary" id="imClose">Verstanden</button></div>
     </div>
   </div>
 
@@ -228,6 +242,7 @@
 <script src="js/render.js"></script>
 <script src="js/save.js"></script>
 <script src="js/ui.js"></script>
+<script src="js/campaign.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>
