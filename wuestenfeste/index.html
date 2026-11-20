@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wüstenfeste</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+SC:wght@500;700&family=Alegreya+Sans:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!--BODY-START-->
+<div id="app">
+  <canvas id="view"></canvas>
+
+  <header id="top" hidden>
+    <div class="res" id="resbar"></div>
+    <div class="spacer"></div>
+    <div id="peace" class="peace"></div>
+    <div id="date" class="date"></div>
+    <div class="speed" role="group" aria-label="Spielgeschwindigkeit">
+      <button id="spPause" title="Pause (Leertaste)">❚❚</button>
+      <button id="sp1" title="Normal (1)">1×</button>
+      <button id="sp2" title="Schnell (2)">2×</button>
+      <button id="sp3" title="Sehr schnell (3)">3×</button>
+    </div>
+    <button id="btnHelp" class="ghostbtn" title="Anleitung (H)">?</button>
+    <button id="btnMenu" class="menubtn">Menü</button>
+  </header>
+
+  <div id="msgs" aria-live="polite"></div>
+  <div id="pausedTag" hidden>Pausiert</div>
+
+  <footer id="bottom" hidden>
+    <section id="build">
+      <div class="tabs" id="tabs"></div>
+      <div class="items" id="items"></div>
+      <div class="hint" id="hint">Wähle ein Gebäude aus.</div>
+    </section>
+    <section id="info"></section>
+    <section id="minibox">
+      <canvas id="mini" width="232" height="124"></canvas>
+    </section>
+  </footer>
+
+  <!-- Hauptmenü -->
+  <div class="overlay" id="menu">
+    <div class="panel title-panel">
+      <h1>Wüstenfeste</h1>
+      <p class="tag">Errichte eine Burg in der Wüste, ernähre dein Volk und halte dem Wüstenfürsten stand.</p>
+      <div class="menu-grid">
+        <div class="menu-col">
+          <h2>Neues Spiel</h2>
+          <label class="field"><span>Schwierigkeit</span>
+            <select id="optDiff">
+              <option value="leicht">Leicht</option>
+              <option value="normal" selected>Normal</option>
+              <option value="schwer">Schwer</option>
+            </select>
+          </label>
+          <label class="field"><span>Friedenszeit</span>
+            <select id="optPeace">
+              <option value="5">5 Minuten</option>
+              <option value="8" selected>8 Minuten</option>
+              <option value="12">12 Minuten</option>
+              <option value="20">20 Minuten</option>
+            </select>
+          </label>
+          <button class="primary" id="btnNew">Spiel starten</button>
+        </div>
+        <div class="menu-col">
+          <h2>Spielstände</h2>
+          <div id="menuSlots" class="slots"></div>
+          <button id="btnImport1">Spielstand importieren …</button>
+        </div>
+      </div>
+      <button class="linkbtn" id="btnHelp2">Anleitung lesen</button>
+    </div>
+  </div>
+
+  <!-- Spielmenü -->
+  <div class="overlay" id="pause" hidden>
+    <div class="panel">
+      <h2>Menü</h2>
+      <div class="slots" id="pauseSlots"></div>
+      <div class="row">
+        <button id="btnExport">Exportieren …</button>
+        <button id="btnImport2">Importieren …</button>
+      </div>
+      <div class="row">
+        <button id="btnToMenu">Hauptmenü</button>
+        <button class="primary" id="btnResume">Weiterspielen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export / Import -->
+  <div class="overlay" id="xfer" hidden>
+    <div class="panel wide">
+      <h2 id="xferTitle">Spielstand</h2>
+      <p id="xferText" class="small"></p>
+      <textarea id="xferData" spellcheck="false" rows="7"></textarea>
+      <div class="row">
+        <input type="file" id="xferFile" accept=".json,application/json" hidden>
+        <button id="xferCopy">Kopieren</button>
+        <button id="xferDownload">Als Datei speichern</button>
+        <button id="xferPick">Datei wählen …</button>
+        <span class="spacer"></span>
+        <button id="xferClose">Schließen</button>
+        <button class="primary" id="xferLoad">Laden</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bestätigung -->
+  <div class="overlay" id="confirm" hidden>
+    <div class="panel narrow">
+      <p id="confirmText"></p>
+      <div class="row end">
+        <button id="confirmNo">Abbrechen</button>
+        <button class="primary" id="confirmYes">Ja</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Anleitung -->
+  <div class="overlay" id="help" hidden>
+    <div class="panel wide help">
+      <h2>Anleitung</h2>
+      <div class="help-grid">
+        <div>
+          <h3>Ziel</h3>
+          <p>Zerstöre den Burgfried des Wüstenfürsten (rot), bevor er deinen (blau) zerstört. Bis zum Ende der Friedenszeit greift er nicht an.</p>
+          <h3>Wirtschaft</h3>
+          <ul>
+            <li><b>Holzfäller</b> nahe Palmen bauen. Holz kommt ins <b>Lager</b>.</li>
+            <li><b>Steinbruch</b> nur auf grauem Fels, <b>Eisenmine</b> nur auf rostrotem Boden.</li>
+            <li><b>Apfelhaine</b> nur auf grünem Oasenboden. Äpfel kommen in den <b>Kornspeicher</b>.</li>
+            <li>Jedes Arbeitsgebäude braucht einen freien Bauern vom Lagerfeuer.</li>
+            <li><b>Hütten</b> geben Platz für 8 weitere Bauern.</li>
+          </ul>
+          <h3>Beliebtheit</h3>
+          <p>Über 50 kommen neue Bauern, unter 50 laufen sie weg. Rationen, Steuern und Kapellen bestimmen sie. Einstellen kannst du das im <b>Burgfried</b>-Fenster (Burgfried anklicken oder Taste B).</p>
+        </div>
+        <div>
+          <h3>Militär</h3>
+          <ul>
+            <li>Die <b>Kaserne</b> macht aus freien Bauern Soldaten.</li>
+            <li>Bogenschützen auf <b>Wachtürmen</b> schießen weiter und sind geschützt.</li>
+            <li><b>Mauern</b> durch Ziehen bauen. <b>Tore</b> lassen nur deine Leute durch – vergiss sie nicht, sonst kommen deine Arbeiter nicht hinaus.</li>
+          </ul>
+          <h3>Steuerung</h3>
+          <table class="keys">
+            <tr><td>Linksklick</td><td>Auswählen, bauen</td></tr>
+            <tr><td>Ziehen</td><td>Soldaten einrahmen / Mauer ziehen</td></tr>
+            <tr><td>Rechtsklick</td><td>Bewegen, angreifen, Turm besetzen, Bauen abbrechen</td></tr>
+            <tr><td>WASD / Pfeile</td><td>Karte verschieben</td></tr>
+            <tr><td>Zwei Finger / Mausrad</td><td>Verschieben bzw. Zoomen (Einstellbar unten)</td></tr>
+            <tr><td>+ / − , Pinch</td><td>Zoomen</td></tr>
+            <tr><td>Leertaste</td><td>Pause</td></tr>
+            <tr><td>1 / 2 / 3</td><td>Geschwindigkeit</td></tr>
+            <tr><td>B</td><td>Burgfried-Fenster</td></tr>
+            <tr><td>Q</td><td>Alle Soldaten auswählen</td></tr>
+            <tr><td>Entf</td><td>Gewähltes Gebäude abreißen</td></tr>
+            <tr><td>Strg + S</td><td>Schnellspeichern</td></tr>
+            <tr><td>Esc</td><td>Abbrechen / Menü</td></tr>
+          </table>
+          <label class="field inline"><span>Mausrad</span>
+            <select id="optWheel">
+              <option value="auto">Automatisch</option>
+              <option value="zoom">Zoomen</option>
+              <option value="pan">Verschieben</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div class="row end"><button class="primary" id="helpClose">Verstanden</button></div>
+    </div>
+  </div>
+
+  <!-- Spielende -->
+  <div class="overlay" id="end" hidden>
+    <div class="panel narrow center">
+      <h2 id="endTitle"></h2>
+      <p id="endText"></p>
+      <div class="row end">
+        <button id="endMenu">Hauptmenü</button>
+        <button class="primary" id="endNew">Neues Spiel</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!--BODY-END-->
+<script src="js/util.js"></script>
+<script src="js/data.js"></script>
+<script src="js/world.js"></script>
+<script src="js/game.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/render.js"></script>
+<script src="js/save.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
